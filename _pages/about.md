@@ -59,7 +59,7 @@ latest_posts:
   }
   .profile img {
     width: 100%;
-    aspect-ratio: 5 / 7;
+    aspect-ratio: 2 / 3;
     object-fit: cover;
     border-radius: 12px;
     box-shadow: 0 8px 30px rgba(59, 91, 219, 0.25);
