@@ -1,0 +1,117 @@
+cv:
+  name: Chen Jiawei
+  label: AI Infra Researcher & Engineer
+  email: 2451427796@qq.com
+  location: Beijing, China
+  image: ""
+  summary: AI Infra researcher and engineer focused on large-model distributed training & inference, memory optimization and load scheduling. Open-source contributor to the FlagOS ecosystem with 1000-GPU-scale experience on heterogeneous accelerators. Seeking a PhD in large-model systems (2028-2029 Fall).
+
+  social_networks:
+    - network: GitHub
+      username: cjwystz
+
+  address:
+    street: University of Science & Technology Beijing
+    city: Beijing
+    region: ""
+    postalCode: ""
+    countryCode: CN
+
+  sections:
+    Education:
+      - institution: University of Science & Technology Beijing
+        location: Beijing, China
+        url: https://www.ustb.edu.cn/
+        area: Information Security
+        studyType: B.Eng.
+        start_date: 2023
+        end_date: 2027
+        score: "IELTS 6.5 (all >= 6.0)"
+        courses: "Systems security, parallel computing, AI systems"
+        highlights:
+          - "National First Prize, National Metallurgy Science & Technology Competition"
+          - "National Second Prize, ASC Student Supercomputer Challenge"
+
+    Experience:
+      - company: Qingcheng Jizhi
+        position: AI Infra Intern
+        location: China
+        start_date: 2025
+        end_date: present
+        summary: Contribute to the FlagOS / FlagScale training framework for the MetaX ecosystem — bug fixes, hardware adaptation and training-framework optimization.
+        highlights:
+          - "1000-GPU-scale training & inference on Huawei Ascend 910C, MetaX C550, Ali Zhenwu 810E"
+          - "Method-level open-source contributions to FlagScale (4k+ stars)"
+
+      - company: FlagOS Open Source Community
+        position: Contributor
+        location: Remote
+        start_date: 2025
+        end_date: present
+        summary: Contributions to the FlagOS training stack (te-fl, FlagScale, Megatron-LM adaptations).
+        highlights:
+          - "zkLLM: LLM zero-knowledge proof visualization system — National Software Copyright 2025SR0617553"
+
+    Publications:
+      - title: Heterogeneous-modeling Packing Scheduling for General LLM Training
+        authors:
+          - Jiawei Chen
+        publisher: MLSys 2027 (to be submitted, Oct 2026)
+        releaseDate: 2026-10-01
+        summary: Packing time-cost model with snake-dealing scheduling; Chunk-CE / Chunk-Linear memory operators; +20% end-to-end training throughput.
+
+      - title: Formal-Proof-Guided Multimodal Geometric Reasoning
+        authors:
+          - Jiawei Chen
+        publisher: TMLR 2027 (under review)
+        releaseDate: 2026-01-01
+        url: https://arxiv.org/abs/2601.05073
+        summary: GeoGoal benchmark with Skeleton Rate; SGVR dense process reward; +9.7% geometry / +8.0% general math under GRPO.
+
+      - title: RAG-Optimized Text-to-Image Generation for Consumer Platforms
+        authors:
+          - Jiawei Chen
+        publisher: WISE 2025 Workshop (published)
+        releaseDate: 2025-09-01
+        url: https://github.com/Dadada66666/T2I
+        summary: RAG-fronted prompt optimization for T2I systems; Tavily + BGE-m3 + ChromaDB two-stage pipeline; +114% average score vs LLM-only rewriting.
+
+    Awards:
+      - title: National First Prize
+        awarder: National Metallurgy Science & Technology Competition
+        date: 2025
+      - title: National Second Prize
+        awarder: ASC Student Supercomputer Challenge
+        date: 2025
+      - title: Honorable Mention
+        awarder: MCM / ICM
+        date: 2024
+      - title: Provincial Third Prize
+        awarder: China Collegiate Cyber-Security Challenge
+        date: 2023
+
+    Skills:
+      - name: Training Systems
+        level: Advanced
+        keywords: "Megatron-LM, MindSpeed, FlagScale, FSDP, PyTorch"
+      - name: Inference Systems
+        level: Advanced
+        keywords: "vLLM, vLLM-Ascend, SGLang"
+      - name: Hardware Platforms
+        level: Advanced
+        keywords: "Huawei Ascend 910C, MetaX C550, Ali Zhenwu 810E, NVIDIA A800/A100"
+      - name: Tooling
+        level: Advanced
+        keywords: "Performance Profiler, Docker, AI-assisted coding"
+
+    Languages:
+      - name: Chinese
+        summary: "Native"
+      - name: English
+        summary: "IELTS 6.5 (all >= 6.0)"
+
+    Interests:
+      - name: LLM Systems
+        keywords: "Distributed training & inference, memory optimization, load scheduling"
+      - name: Embodied AI
+        keywords: "Robotics, multimodal reasoning"
