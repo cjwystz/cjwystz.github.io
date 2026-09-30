@@ -1,0 +1,4 @@
+User-agent: *
+Disallow:
+
+Sitemap: https://cjwystz.github.io/sitemap.xml
