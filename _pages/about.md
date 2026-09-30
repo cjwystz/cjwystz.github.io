@@ -7,7 +7,7 @@ subtitle: AI Infra Researcher &amp; Engineer · B.Eng. Information Security @ US
 profile:
   align: right
   image: prof_pic.jpg
-  image_circular: true # crops the image to make it circular
+  image_circular: false # crops the image to make it circular
   more_info: >
     <p>2451427796@qq.com</p>
     <p>+86 186 5933 6708</p>
