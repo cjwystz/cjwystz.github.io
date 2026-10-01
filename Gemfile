@@ -2,6 +2,12 @@ source 'https://rubygems.org'
 
 gem 'jekyll'
 
+# The starter's Gemfile.lock pinned jekyll-sass-converter 2.x (LibSass),
+# which cannot compile the @use-based stylesheets in al_folio_core and
+# silently passed them through, leaving the site without most styling.
+# Force 3.x (Dart Sass). Lockfile intentionally not committed (as upstream).
+gem 'jekyll-sass-converter', '~> 3.0'
+
 # Core plugins that directly affect site building
 group :jekyll_plugins do
     gem 'jekyll-3rd-party-libraries'
