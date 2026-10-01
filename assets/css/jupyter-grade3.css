@@ -654,3 +654,27 @@ body :focus .MathJax {
 body :focus .MathJax {
   display: inline-block !important;
 }
+
+.completions {
+  position: absolute;
+  z-index: 110;
+  overflow: hidden;
+  border: medium solid rgba(240, 147, 43, 0.5);
+  box-shadow: none;
+  line-height: 1;
+}
+
+.completions select {
+  background: #ededed;
+  background-color: #ededed;
+  outline: none;
+  border: none;
+  padding: 0px;
+  margin: 0px;
+  margin-left: 2px;
+  overflow: auto;
+  font-family: monospace, monospace;
+  font-size: 11pt;
+  color: #303030;
+  width: auto;
+}

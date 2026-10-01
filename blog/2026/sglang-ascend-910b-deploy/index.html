@@ -1,0 +1,238 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> 昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。"> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/sglang-ascend-910b-deploy/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API</h1> <p class="post-meta"> 发布于 2026 年 10 月 1 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/ascend-910b"> <i class="fa-solid fa-hashtag fa-sm"></i> ascend-910b</a>   <a href="/blog/tag/sglang"> <i class="fa-solid fa-hashtag fa-sm"></i> sglang</a>   <a href="/blog/tag/inference"> <i class="fa-solid fa-hashtag fa-sm"></i> inference</a>   <a href="/blog/tag/ai-infra"> <i class="fa-solid fa-hashtag fa-sm"></i> ai-infra</a>   ·   <a href="/blog/category/engineering"> <i class="fa-solid fa-tag fa-sm"></i> engineering</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#0-%E7%8E%AF%E5%A2%83%E4%B8%8E%E7%9B%AE%E6%A0%87">0. 环境与目标</a></li> <li class="toc-entry toc-h2"> <a href="#1-%E9%83%A8%E7%BD%B2%E5%89%8D%E6%A3%80%E6%9F%A5">1. 部署前检查</a> <ul> <li class="toc-entry toc-h3"><a href="#11-%E7%A1%AE%E8%AE%A4-npu-%E5%81%A5%E5%BA%B7%E7%8A%B6%E6%80%81">1.1 确认 NPU 健康状态</a></li> <li class="toc-entry toc-h3"><a href="#12-%E7%A1%AE%E8%AE%A4%E9%95%9C%E5%83%8F%E5%B7%B2%E5%9C%A8%E6%9C%AC%E5%9C%B0">1.2 确认镜像已在本地</a></li> <li class="toc-entry toc-h3"><a href="#13-%E8%BD%AF%E4%BB%B6%E6%A0%88%E7%89%88%E6%9C%AC%E5%AE%B9%E5%99%A8%E5%86%85%E7%A1%AE%E8%AE%A4">1.3 软件栈版本（容器内确认）</a></li> </ul> </li> <li class="toc-entry toc-h2"><a href="#2-%E5%90%AF%E5%8A%A8%E5%AE%B9%E5%99%A8">2. 启动容器</a></li> <li class="toc-entry toc-h2"><a href="#3-%E9%AA%8C%E8%AF%81%E8%AE%BE%E5%A4%87%E5%8F%AF%E8%A7%81%E6%80%A7">3. 验证设备可见性</a></li> <li class="toc-entry toc-h2"><a href="#4-%E5%90%AF%E5%8A%A8%E6%8E%A8%E7%90%86%E6%9C%8D%E5%8A%A1">4. 启动推理服务</a></li> <li class="toc-entry toc-h2"> <a href="#5-%E6%9C%8D%E5%8A%A1%E9%AA%8C%E8%AF%81">5. 服务验证</a> <ul> <li class="toc-entry toc-h3"><a href="#51-%E5%81%A5%E5%BA%B7%E6%A3%80%E6%9F%A5">5.1 健康检查</a></li> <li class="toc-entry toc-h3"><a href="#52-%E5%8E%9F%E7%94%9F-generate-%E6%8E%A5%E5%8F%A3">5.2 原生 generate 接口</a></li> <li class="toc-entry toc-h3"><a href="#53-openai-%E5%85%BC%E5%AE%B9%E6%8E%A5%E5%8F%A3">5.3 OpenAI 兼容接口</a></li> <li class="toc-entry toc-h3"><a href="#54-%E5%81%9C%E6%AD%A2%E6%9C%8D%E5%8A%A1">5.4 停止服务</a></li> </ul> </li> <li class="toc-entry toc-h2"><a href="#6-%E6%97%A0%E5%A4%96%E7%BD%91%E7%8E%AF%E5%A2%83%E7%9A%84%E4%B8%A4%E6%9D%A1%E8%B7%AF%E5%BE%84">6. 无外网环境的两条路径</a></li> <li class="toc-entry toc-h2"><a href="#7-%E9%97%AE%E9%A2%98%E9%80%9F%E6%9F%A5%E8%A1%A8">7. 问题速查表</a></li> <li class="toc-entry toc-h2"><a href="#%E6%80%BB%E7%BB%93">总结</a></li> </ul> </div> <hr> <div id="markdown-content"> <p>本文记录在昇腾 910B 服务器上从零部署 SGLang 推理服务的完整流程。每一步都给出命令、预期输出，以及我实际踩过的坑和排查过程。</p> <h2 id="0-环境与目标">0. 环境与目标</h2> <ul> <li> <strong>机器</strong>：Atlas 800I A2，8×910B3，驱动 25.5.1</li> <li> <strong>镜像</strong>：<code class="language-plaintext highlighter-rouge">quay.io/ascend/sglang:v0.5.18-cann9.0.0-910b</code>（CANN 9.0.0 / torch 2.10.0+cpu / torch_npu 2.10.0 / sglang 0.5.18）</li> <li> <strong>模型</strong>：Qwen3-8B，本地权重（集群无外网，无法直连 HuggingFace）</li> <li> <strong>目标</strong>：起一个可通过 HTTP 访问的推理服务</li> </ul> <p>两个前提约束先交代清楚：</p> <ol> <li> <strong>本机 4 号卡已被其他任务的容器长期占用</strong>，本次只用 0–3 号卡；</li> <li> <strong>集群无外网</strong>，<code class="language-plaintext highlighter-rouge">huggingface.co</code> 和 <code class="language-plaintext highlighter-rouge">hf-mirror.com</code> 均不通，只有 ModelScope 可直连。所以模型必须走本地权重或 ModelScope（见第 6 节）。</li> </ol> <h2 id="1-部署前检查">1. 部署前检查</h2> <h3 id="11-确认-npu-健康状态">1.1 确认 NPU 健康状态</h3> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>npu-smi info
+</code></pre></div></div> <p>预期输出一张表，8 张 910B3 的 <code class="language-plaintext highlighter-rouge">Health</code> 列均为 <code class="language-plaintext highlighter-rouge">OK</code>。同时看一眼每行的显存占用（<code class="language-plaintext highlighter-rouge">HBM-Usage</code>）——我就是从这里确认 4 号卡已有任务在跑，从而决定只用 0–3 号卡。</p> <h3 id="12-确认镜像已在本地">1.2 确认镜像已在本地</h3> <p>无外网集群拉不了镜像，确认镜像已提前拉好：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker images | <span class="nb">grep </span>sglang
+<span class="c"># quay.io/ascend/sglang   v0.5.18-cann9.0.0-910b   ...</span>
+</code></pre></div></div> <h3 id="13-软件栈版本容器内确认">1.3 软件栈版本（容器内确认）</h3> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cat</span> /usr/local/Ascend/ascend-toolkit/latest/aarch64-linux/ascend_toolkit_install.info
+python <span class="nt">-c</span> <span class="s2">"import torch, torch_npu, sglang; </span><span class="se">\</span><span class="s2">
+  print(torch.__version__, torch_npu.__version__, sglang.__version__)"</span>
+<span class="c"># 2.10.0+cpu 2.10.0 0.5.18</span>
+</code></pre></div></div> <p>注意：NPU 镜像是 <strong>CPU 版 torch + torch_npu 插件</strong>的组合，算子实际走 NPU 执行，<code class="language-plaintext highlighter-rouge">torch 2.10.0+cpu</code> 是正常搭配，不是装错了。</p> <h2 id="2-启动容器">2. 启动容器</h2> <p>SGLang 官方 Ascend 文档给出了标准启动命令，按此执行：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker run <span class="nt">-itd</span> <span class="nt">--name</span> sglang-910b <span class="se">\</span>
+  <span class="nt">--privileged</span> <span class="nt">--network</span><span class="o">=</span>host <span class="nt">--ipc</span><span class="o">=</span>host <span class="nt">--shm-size</span><span class="o">=</span>16g <span class="se">\</span>
+  <span class="nt">--device</span><span class="o">=</span>/dev/davinci0 <span class="nt">--device</span><span class="o">=</span>/dev/davinci1 <span class="se">\</span>
+  <span class="nt">--device</span><span class="o">=</span>/dev/davinci2 <span class="nt">--device</span><span class="o">=</span>/dev/davinci3 <span class="se">\</span>
+  <span class="nt">--device</span><span class="o">=</span>/dev/davinci_manager <span class="nt">--device</span><span class="o">=</span>/dev/hisi_hdc <span class="se">\</span>
+  <span class="nt">--volume</span> /usr/local/sbin:/usr/local/sbin <span class="se">\</span>
+  <span class="nt">--volume</span> /usr/local/Ascend/driver:/usr/local/Ascend/driver <span class="se">\</span>
+  <span class="nt">--volume</span> /usr/local/Ascend/firmware:/usr/local/Ascend/firmware <span class="se">\</span>
+  <span class="nt">--volume</span> /etc/ascend_install.info:/etc/ascend_install.info <span class="se">\</span>
+  <span class="nt">--volume</span> /var/queue_schedule:/var/queue_schedule <span class="se">\</span>
+  <span class="nt">--volume</span> /data:/data:ro <span class="se">\</span>
+  <span class="nt">--entrypoint</span><span class="o">=</span>bash <span class="se">\</span>
+  quay.io/ascend/sglang:v0.5.18-cann9.0.0-910b
+</code></pre></div></div> <p>逐参数说明：</p> <table> <thead> <tr> <th>参数</th> <th>作用</th> </tr> </thead> <tbody> <tr> <td><code class="language-plaintext highlighter-rouge">--privileged</code></td> <td>NPU 设备操作需要特权模式（副作用见第 3 节）</td> </tr> <tr> <td><code class="language-plaintext highlighter-rouge">--network=host</code></td> <td>共享宿主机网络，服务端口直接对外</td> </tr> <tr> <td><code class="language-plaintext highlighter-rouge">--ipc=host --shm-size=16g</code></td> <td>多进程加载权重需要足够共享内存</td> </tr> <tr> <td><code class="language-plaintext highlighter-rouge">--device=/dev/davinciN</code></td> <td>暴露 NPU 设备节点</td> </tr> <tr> <td> <code class="language-plaintext highlighter-rouge">/dev/davinci_manager</code>、<code class="language-plaintext highlighter-rouge">/dev/hisi_hdc</code> </td> <td>NPU 管理/调试设备，必需</td> </tr> <tr> <td> <code class="language-plaintext highlighter-rouge">/usr/local/Ascend/driver</code>、<code class="language-plaintext highlighter-rouge">firmware</code> </td> <td>驱动与固件目录</td> </tr> <tr> <td><code class="language-plaintext highlighter-rouge">/etc/ascend_install.info</code></td> <td>驱动安装信息文件</td> </tr> <tr> <td><code class="language-plaintext highlighter-rouge">/usr/local/sbin</code></td> <td>含 NPU 管理工具脚本</td> </tr> <tr> <td><code class="language-plaintext highlighter-rouge">/var/queue_schedule</code></td> <td>NPU 队列调度目录</td> </tr> <tr> <td><code class="language-plaintext highlighter-rouge">/data:/data:ro</code></td> <td>本地模型权重，<strong>只读</strong>挂载防误写</td> </tr> <tr> <td><code class="language-plaintext highlighter-rouge">--entrypoint=bash</code></td> <td>覆盖默认入口，容器起后不自动跑服务</td> </tr> </tbody> </table> <p><strong>坑 1：挂载不全 → 容器内认不到卡。</strong> 我初次部署时只挂了 <code class="language-plaintext highlighter-rouge">--device</code> 和 driver 目录，结果容器内 <code class="language-plaintext highlighter-rouge">torch_npu.npu.device_count()</code> 返回 0。逐一补齐 <code class="language-plaintext highlighter-rouge">ascend_install.info</code>、<code class="language-plaintext highlighter-rouge">firmware</code>、<code class="language-plaintext highlighter-rouge">/usr/local/sbin</code>、<code class="language-plaintext highlighter-rouge">/var/queue_schedule</code> 后才正常。缺设备和缺这些文件的表现完全一样，都是 device_count=0，排查时不要只盯着 <code class="language-plaintext highlighter-rouge">--device</code>。</p> <h2 id="3-验证设备可见性">3. 验证设备可见性</h2> <p>进容器检查：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker <span class="nb">exec</span> <span class="nt">-it</span> sglang-910b python <span class="nt">-c</span> <span class="se">\</span>
+  <span class="s2">"import torch_npu; print('visible NPUs:', torch_npu.npu.device_count())"</span>
+</code></pre></div></div> <p>输出 <code class="language-plaintext highlighter-rouge">visible NPUs: 8</code>——<strong>不是 4</strong>。因为 <code class="language-plaintext highlighter-rouge">--privileged</code> 让容器看见宿主全部 8 张 NPU，<code class="language-plaintext highlighter-rouge">--device</code> 只挂 4 个并不构成隔离。</p> <p><strong>坑 2：多任务混部必须手动做卡级隔离。</strong> 如果不加限制直接起服务，SGLang 会尝试用所有可见的卡，直接撞上 4 号卡上别人的任务。进入容器后第一件事：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker <span class="nb">exec</span> <span class="nt">-it</span> sglang-910b bash
+<span class="nb">export </span><span class="nv">ASCEND_RT_VISIBLE_DEVICES</span><span class="o">=</span>0,1,2,3
+</code></pre></div></div> <p>设置后再确认：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>python <span class="nt">-c</span> <span class="s2">"import torch_npu; print('visible NPUs:', torch_npu.npu.device_count())"</span>
+<span class="c"># visible NPUs: 4</span>
+</code></pre></div></div> <h2 id="4-启动推理服务">4. 启动推理服务</h2> <p>无外网环境，直接用本地权重。在容器内执行：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">nohup </span>sglang serve <span class="se">\</span>
+  <span class="nt">--model-path</span> /data/models/Qwen3-8B <span class="se">\</span>
+  <span class="nt">--attention-backend</span> ascend <span class="se">\</span>
+  <span class="o">&gt;</span> sglang_serve.log 2&gt;&amp;1 &amp;
+
+<span class="nb">tail</span> <span class="nt">-f</span> sglang_serve.log
+</code></pre></div></div> <p>两个参数说明：</p> <ul> <li> <code class="language-plaintext highlighter-rouge">--model-path</code>：指向本地模型目录（含 config.json 和权重文件的完整目录）；</li> <li> <code class="language-plaintext highlighter-rouge">--attention-backend ascend</code>：使用昇腾 NPU 的 attention 后端，910B 上必须显式指定。</li> </ul> <p>启动日志关键输出：</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Capturing batches (bs=1 avail_mem=5.37 GB): 100%|██████| 12/12 [00:41]
+max_total_num_tokens=55168, chunked_prefill_size=8192,
+max_prefill_tokens=16384, max_running_requests=2048, context_len=40960
+Engine startup timings (s): load_weight=4.08, cuda_graph={decode=42.70}
+Uvicorn running on http://127.0.0.1:30000
+The server is fired up and ready to roll!
+</code></pre></div></div> <p>逐行解读：</p> <ul> <li> <code class="language-plaintext highlighter-rouge">load_weight=4.08</code>：权重加载只用了 4 秒；</li> <li> <code class="language-plaintext highlighter-rouge">cuda_graph={decode=42.70}</code>：decode 阶段 graph 捕获 42.7 秒，是<strong>一次性开销</strong>，后续请求不再付出；</li> <li> <code class="language-plaintext highlighter-rouge">max_total_num_tokens=55168</code>：可用 KV cache 容量；</li> <li> <code class="language-plaintext highlighter-rouge">context_len=40960</code>：模型上下文长度；</li> <li>看到 <code class="language-plaintext highlighter-rouge">The server is fired up and ready to roll!</code> 即启动成功。</li> </ul> <p>默认绑定 <code class="language-plaintext highlighter-rouge">127.0.0.1:30000</code>。如果需要从其他机器访问，加 <code class="language-plaintext highlighter-rouge">--host 0.0.0.0</code>；端口用 <code class="language-plaintext highlighter-rouge">--port</code> 改。</p> <h2 id="5-服务验证">5. 服务验证</h2> <h3 id="51-健康检查">5.1 健康检查</h3> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl http://127.0.0.1:30000/health
+<span class="c"># （200，空响应体即正常）</span>
+</code></pre></div></div> <h3 id="52-原生-generate-接口">5.2 原生 generate 接口</h3> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://localhost:30000/generate <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{
+    "text": "The capital of France is",
+    "sampling_params": {"temperature": 0, "max_new_tokens": 16}
+  }'</span>
+</code></pre></div></div> <p>返回：</p> <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">{</span><span class="nl">"text"</span><span class="p">:</span><span class="w"> </span><span class="s2">" Paris. The capital of Italy is Rome. The capital of Spain is Madrid."</span><span class="p">,</span><span class="w">
+ </span><span class="nl">"meta_info"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nl">"e2e_latency"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.311</span><span class="p">,</span><span class="w"> </span><span class="nl">"completion_tokens"</span><span class="p">:</span><span class="w"> </span><span class="mi">16</span><span class="p">}}</span><span class="w">
+</span></code></pre></div></div> <p>输出正确，端到端延迟约 0.31s。</p> <h3 id="53-openai-兼容接口">5.3 OpenAI 兼容接口</h3> <p>SGLang 同时暴露 <code class="language-plaintext highlighter-rouge">/v1/chat/completions</code>，方便对接现有工具链：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>curl <span class="nt">-X</span> POST http://127.0.0.1:30000/v1/chat/completions <span class="se">\</span>
+  <span class="nt">-H</span> <span class="s2">"Content-Type: application/json"</span> <span class="se">\</span>
+  <span class="nt">-d</span> <span class="s1">'{
+    "model": "/data/models/Qwen3-8B",
+    "messages": [{"role": "user", "content": "你好，请用一句话介绍你自己"}],
+    "temperature": 0,
+    "max_tokens": 64
+  }'</span>
+</code></pre></div></div> <p>注意本地权重模式下，<code class="language-plaintext highlighter-rouge">model</code> 字段填的是模型<strong>路径</strong>而不是模型名。</p> <h3 id="54-停止服务">5.4 停止服务</h3> <p>服务跑在容器里，最干净的停止方式：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker stop sglang-910b        <span class="c"># 停容器（服务随之终止）</span>
+docker start sglang-910b       <span class="c"># 下次重新进容器</span>
+</code></pre></div></div> <p>如果只想停服务保留容器：先 <code class="language-plaintext highlighter-rouge">ps aux | grep sglang</code> 找到 PID 再 <code class="language-plaintext highlighter-rouge">kill &lt;PID&gt;</code>。<strong>多人混部的机器上慎用 <code class="language-plaintext highlighter-rouge">pkill -f sglang</code></strong>，容易误伤别人的进程。</p> <h2 id="6-无外网环境的两条路径">6. 无外网环境的两条路径</h2> <p>如果服务器无法访问 HuggingFace，直接启动会在 server args 解析阶段尝试联网拉 config，抛出一个裸的 <code class="language-plaintext highlighter-rouge">OSError: We couldn't connect to 'https://huggingface.co'...</code>。这是网络问题不是框架问题，两条绕行路径：</p> <ol> <li> <strong>本地权重</strong>（本文方式）：<code class="language-plaintext highlighter-rouge">--model-path</code> 直接指向已下载的模型目录，全程不联网；</li> <li> <strong>ModelScope</strong>：国内可直连。<code class="language-plaintext highlighter-rouge">export SGLANG_USE_MODELSCOPE=true</code> 后，<code class="language-plaintext highlighter-rouge">--model-path</code> 填 ModelScope 模型 ID（如 <code class="language-plaintext highlighter-rouge">Qwen/Qwen3-8B</code>）即可自动下载。</li> </ol> <h2 id="7-问题速查表">7. 问题速查表</h2> <table> <thead> <tr> <th>现象</th> <th>原因</th> <th>解决</th> </tr> </thead> <tbody> <tr> <td> <code class="language-plaintext highlighter-rouge">device_count()</code> 返回 0</td> <td>挂载不全（不只缺 <code class="language-plaintext highlighter-rouge">--device</code>）</td> <td>补齐第 2 节全部 volume</td> </tr> <tr> <td>服务想占用全部 8 卡</td> <td> <code class="language-plaintext highlighter-rouge">--privileged</code> 可见所有 NPU</td> <td><code class="language-plaintext highlighter-rouge">export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3</code></td> </tr> <tr> <td>启动报 <code class="language-plaintext highlighter-rouge">OSError: couldn't connect to huggingface.co</code> </td> <td>无外网，框架尝试在线拉 config</td> <td>本地权重或 <code class="language-plaintext highlighter-rouge">SGLANG_USE_MODELSCOPE=true</code> </td> </tr> <tr> <td>起服务慢</td> <td>decode graph 捕获</td> <td>正常，一次性开销约 40s</td> </tr> </tbody> </table> <h2 id="总结">总结</h2> <p>910B 上部署 SGLang 的关键点：</p> <ul> <li>容器挂载除 <code class="language-plaintext highlighter-rouge">--device</code> 外，<code class="language-plaintext highlighter-rouge">ascend_install.info</code>、firmware、<code class="language-plaintext highlighter-rouge">/usr/local/sbin</code>、<code class="language-plaintext highlighter-rouge">/var/queue_schedule</code> 一个都不能少，否则容器内认不到卡；</li> <li> <code class="language-plaintext highlighter-rouge">--privileged</code> 下容器可见全部 NPU，混部场景必须用 <code class="language-plaintext highlighter-rouge">ASCEND_RT_VISIBLE_DEVICES</code> 做隔离；</li> <li>无外网环境用本地权重或 ModelScope 镜像源即可，报网络错别当成框架 bug；</li> <li>官方镜像 <code class="language-plaintext highlighter-rouge">v0.5.18-cann9.0.0-910b</code> + Qwen3-8B，从启动到服务可用约 1 分钟（含 graph 捕获），单请求延迟亚秒级。</li> </ul> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/welcome/">欢迎来到我的大模型系统笔记</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2025/rag-optimized-t2i/">RAG 优化文生图——不动模型，修复提示词错位</a> </li> </ul> </div> </div> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "publications by categories in reversed chronological order. generated by jekyll-scholar.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Edit the `_data/repositories.yml` and change the `github_users` and `github_repos` lists to include your own GitHub profile and repositories.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "This is a description of the page. You can modify it in &#39;_pages/cv.md&#39;. You can also change or remove the top pdf download button.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-mlsys-2027-submission-in-progress-heterogeneous-modeling-packing-scheduling-for-general-llm-training-qingcheng-jizhi-ustb-co-first-author-to-be-submitted-in-oct-2026",
+          title: 'MLSys 2027 submission in progress: heterogeneous-modeling Packing scheduling for general LLM training (Qingcheng...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "Training-framework contributions for the MetaX ecosystem (4k+ stars)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
