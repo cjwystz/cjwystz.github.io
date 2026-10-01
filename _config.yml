@@ -136,7 +136,7 @@ bing_site_verification: # out your bing-site-verification ID (Bing Webmaster)
 # -----------------------------------------------------------------------------
 
 blog_name: Chen Jiawei # blog_name will be displayed in your blog page
-blog_description: Notes on LLM systems, distributed training & inference, and my research journey
+blog_description: 关于 LLM 系统、分布式训练与推理，以及我的科研历程的随笔
 permalink: /blog/:year/:title/
 lsi: false # produce an index for related posts
 
