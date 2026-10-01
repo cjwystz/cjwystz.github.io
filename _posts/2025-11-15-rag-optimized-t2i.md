@@ -4,6 +4,7 @@ title: RAG 优化文生图——不动模型，修复提示词错位
 date: 2025-11-15 09:00:00 +0800
 categories: [research]
 tags: [multimodal, rag, t2i]
+thumbnail: assets/img/blog/rag-t2i.svg
 ---
 
 *论文笔记：《RAG-Optimized Text-to-Image Generation for Consumer Platforms》，发表于 WISE 2025 Workshop（清华 BNRist）。代码：[github.com/Dadada66666/T2I](https://github.com/Dadada66666/T2I)。*

@@ -5,11 +5,25 @@ date: 2026-10-01 10:00:00 +0800
 categories: [engineering]
 tags: [ascend-910b, sglang, inference, ai-infra]
 description: 在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。
+thumbnail: assets/img/blog/sglang-910b.svg
+featured: true
+mermaid:
+  enabled: true
 toc:
   beginning: true
 ---
 
 本文记录在昇腾 910B 服务器上从零部署 SGLang 推理服务的完整流程。每一步都给出命令、预期输出，以及我实际踩过的坑和排查过程。
+
+全流程五步：
+
+```mermaid
+flowchart LR
+    A["1 环境检查<br/>npu-smi info"] --> B["2 启动容器<br/>挂载清单"]
+    B --> C["3 设备隔离<br/>ASCEND_RT_VISIBLE_DEVICES"]
+    C --> D["4 起服务<br/>sglang serve"]
+    D --> E["5 验证<br/>curl /generate"]
+```
 
 ## 0. 环境与目标
 
@@ -22,6 +36,23 @@ toc:
 
 1. **本机 4 号卡已被其他任务的容器长期占用**，本次只用 0–3 号卡；
 2. **集群无外网**，`huggingface.co` 和 `hf-mirror.com` 均不通，只有 ModelScope 可直连。所以模型必须走本地权重或 ModelScope（见第 6 节）。
+
+部署完成后的形态：
+
+```mermaid
+flowchart TB
+    DATA["/data 只读挂载<br/>Qwen3-8B 权重"] --> SVC
+    CLI["curl 客户端"] -->|"POST /generate"| SVC
+    subgraph HOST["Atlas 800I A2 宿主机（8×910B3）"]
+        subgraph CT["docker 容器（--privileged 可见全部 8 卡）"]
+            SVC["SGLang Server<br/>127.0.0.1:30000"]
+        end
+        OURS["NPU 0–3 ✅ 本次使用"]
+        BUSY["NPU 4–7 ⛔ 他人任务占用"]
+    end
+    SVC ==>|"ASCEND_RT_VISIBLE_DEVICES=0,1,2,3 隔离"| OURS
+    SVC -.->|"不隔离就会误占"| BUSY
+```
 
 ## 1. 部署前检查
 
