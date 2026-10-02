@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 追一个静默精度 bug：我给 SGLang 提 PR 的完整记录
-date: 2026-10-02 21:00:00 +0800
+date: 2026-10-02 12:00:00 +0800
 categories: [engineering]
 tags: [sglang, ascend-910b, moe, open-source]
 description: 从发现 issue #39351 到提交 PR #42182：如何用真机数值证据证明一行精度修复值得被合入——包括验证过程中踩的坑、两个没修成的前任，以及开源礼仪。
