@@ -23,7 +23,11 @@
   color: #999999;
   font-weight: bold;
   font-style: italic;
-} /* Comment.Preproc */ /* Comment.Single */ /* Comment.Special */ /* Generic.Deleted */
+} /* Comment.Preproc */
+.highlight .c1 {
+  color: #999988;
+  font-style: italic;
+} /* Comment.Single */ /* Comment.Special */ /* Generic.Deleted */
 .highlight .ge {
   color: #000000;
   font-style: italic;
@@ -67,7 +71,11 @@
 .highlight .ne {
   color: #990000;
   font-weight: bold;
-} /* Name.Exception */ /* Name.Function */
+} /* Name.Exception */
+.highlight .nf {
+  color: #990000;
+  font-weight: bold;
+} /* Name.Function */
 .highlight .nl {
   color: #990000;
   font-weight: bold;
@@ -98,7 +106,10 @@
 } /* Literal.String.Escape */
 .highlight .sh {
   color: #d01040;
-} /* Literal.String.Heredoc */ /* Literal.String.Interpol */ /* Literal.String.Other */ /* Literal.String.Regex */
+} /* Literal.String.Heredoc */
+.highlight .si {
+  color: #d01040;
+} /* Literal.String.Interpol */ /* Literal.String.Other */ /* Literal.String.Regex */
 .highlight .s1 {
   color: #d01040;
 } /* Literal.String.Single */ /* Literal.String.Symbol */
