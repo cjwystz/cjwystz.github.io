@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题
-date: 2026-10-03 00:30:00 +0800
+date: 2026-10-03 09:00:00 +0800
 categories: [engineering]
 tags: [benchmark, harbor, ai-infra, python, debugging]
 description: 把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及"不要标准答案、只要判分器"的 verify 哲学。
