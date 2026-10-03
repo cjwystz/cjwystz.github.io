@@ -1,0 +1,229 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> 解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术 | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。"> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/frontierswe-inference-task-anatomy/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术</h1> <p class="post-meta"> 发布于 2026 年 10 月 4 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/benchmark"> <i class="fa-solid fa-hashtag fa-sm"></i> benchmark</a>   <a href="/blog/tag/harbor"> <i class="fa-solid fa-hashtag fa-sm"></i> harbor</a>   <a href="/blog/tag/ai-infra"> <i class="fa-solid fa-hashtag fa-sm"></i> ai-infra</a>   <a href="/blog/tag/sglang"> <i class="fa-solid fa-hashtag fa-sm"></i> sglang</a>   <a href="/blog/tag/%E8%AE%BA%E6%96%87%E8%B0%83%E7%A0%94"> <i class="fa-solid fa-hashtag fa-sm"></i> 论文调研</a>   ·   <a href="/blog/category/engineering"> <i class="fa-solid fa-tag fa-sm"></i> engineering</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#1-%E9%A2%98%E7%9B%AE%E5%BD%A2%E6%80%81%E4%B8%BA%E4%BB%80%E4%B9%88%E6%98%AF%E6%89%93-baseline%E8%80%8C%E4%B8%8D%E6%98%AF%E8%BE%BE%E5%88%B0%E6%8C%87%E6%A0%87">1. 题目形态：为什么是”打 baseline”而不是”达到指标”</a></li> <li class="toc-entry toc-h2"><a href="#2-%E7%BB%93%E6%9E%84%E8%A7%A3%E5%89%96%E5%9B%9B%E4%B8%AA%E8%A7%92%E8%89%B2%E5%90%84%E5%8F%B8%E5%85%B6%E8%81%8C">2. 结构解剖：四个角色各司其职</a></li> <li class="toc-entry toc-h2"> <a href="#3-%E5%88%A4%E5%88%86%E6%B5%81%E6%B0%B4%E7%BA%BF%E5%9B%9B%E9%98%B6%E6%AE%B5%E6%AF%8F%E9%98%B6%E6%AE%B5%E9%83%BD%E6%9C%89%E9%98%B2%E5%BE%A1%E7%9B%AE%E6%A0%87">3. 判分流水线：四阶段，每阶段都有防御目标</a> <ul> <li class="toc-entry toc-h3"><a href="#phase-1baseline-%E6%B5%8B%E9%80%9F--%E6%94%B6%E9%9B%86%E5%8F%82%E8%80%83%E8%BE%93%E5%87%BA">Phase 1：Baseline 测速 + 收集参考输出</a></li> <li class="toc-entry toc-h3"><a href="#phase-2candidate-%E6%AD%A3%E7%A1%AE%E6%80%A7%E9%97%A8%E7%A6%81--%E6%B5%8B%E9%80%9F">Phase 2：Candidate 正确性门禁 → 测速</a></li> <li class="toc-entry toc-h3"><a href="#phase-3baseline-%E5%A4%8D%E6%B5%8B">Phase 3：Baseline 复测</a></li> <li class="toc-entry toc-h3"><a href="#phase-4%E5%87%A0%E4%BD%95%E5%B9%B3%E5%9D%87%E5%8A%A0%E9%80%9F%E6%AF%94">Phase 4：几何平均加速比</a></li> </ul> </li> <li class="toc-entry toc-h2"><a href="#4-%E9%98%B2%E4%BD%9C%E5%BC%8A%E6%AD%A6%E5%99%A8%E5%BA%93%E4%B8%83%E4%B8%AA%E6%9C%BA%E5%88%B6">4. 防作弊武器库：七个机制</a></li> <li class="toc-entry toc-h2"><a href="#5-%E5%AF%B9%E5%9B%BD%E4%BA%A7-infra-benchmark-%E7%9A%84%E4%B8%83%E7%82%B9%E5%80%9F%E9%89%B4">5. 对国产 infra benchmark 的七点借鉴</a></li> <li class="toc-entry toc-h2"><a href="#6-%E4%B8%80%E4%B8%AA%E5%86%B7%E9%9D%99%E7%9A%84%E8%AF%84%E4%BC%B0%E5%93%AA%E4%BA%9B%E4%B8%8D%E8%83%BD%E7%9B%B4%E6%8E%A5%E6%8A%84">6. 一个冷静的评估：哪些不能直接抄</a></li> <li class="toc-entry toc-h2"><a href="#7-%E5%92%8C%E6%88%91%E4%BB%AC%E8%87%AA%E5%B7%B1%E7%9A%84%E9%A2%98%E5%AF%B9%E7%85%A7">7. 和我们自己的题对照</a></li> </ul> </div> <hr> <div id="markdown-content"> <p>TL;DR：</p> <ul> <li>逐文件读完了 Proximal Labs 的 FrontierSWE 里 <code class="language-plaintext highlighter-rouge">inference-system-optimization</code> 这道题（B200 + SGLang + Qwen3.5-4B，让 AI agent 优化推理服务速度）；</li> <li>它和一般的”跑个分”benchmark 完全是两个物种：<strong>baseline 本身已经是配置天花板，agent 的唯一出路是写 kernel、改引擎源码、动模型</strong>；</li> <li>判分不是”结果对不对”，而是一条四阶段流水线（baseline 测速 → candidate 正确性门禁 → candidate 测速 → baseline 复测），每一环都针对 agent 的作弊路径做了防御；</li> <li>本文按”结构 → 判分 → 防作弊 → 对国产 benchmark 的借鉴”四层解剖。</li> </ul> <h2 id="1-题目形态为什么是打-baseline而不是达到指标">1. 题目形态：为什么是”打 baseline”而不是”达到指标”</h2> <p>先看任务设定，一句话：<strong>给你一个 B200 上跑 SGLang 服务 Qwen3.5-4B 的环境，和一个已经调优到配置极限的 baseline，你要比它快</strong>。</p> <p>baseline 的配置是：<code class="language-plaintext highlighter-rouge">--kv-cache-dtype fp8_e4m3</code>（FP8 KV cache）+ <code class="language-plaintext highlighter-rouge">--speculative-algorithm NEXTN</code>（MTP 投机解码）+ mamba scheduler V2 + CUDA graphs + <code class="language-plaintext highlighter-rouge">mem-fraction-static 0.88</code> 精细显存分配。instruction 里直接明牌：</p> <blockquote> <p>To beat it, you need to go beyond configuration — custom kernels, SGLang source modifications, or model surgery.</p> </blockquote> <p>这是这道题最核心的设计决策。对比一下常见的失败设计：</p> <table> <thead> <tr> <th>设计</th> <th>结果</th> </tr> </thead> <tbody> <tr> <td>“把吞吐优化到 X tokens/s”</td> <td>agent 背一遍 vLLM/SGLang 调优手册就能过，考的是知识检索</td> </tr> <tr> <td>“baseline 是个烂配置，去优化它”</td> <td>等于把答案写进题里，agent 只要认出”哦这是没开 flash attention”</td> </tr> <tr> <td><strong>“baseline 已经是天花板，去打它”</strong></td> <td>配置级知识全部失效，只能靠真功夫：profiling 找瓶颈、写自定义 kernel、改框架源码</td> </tr> </tbody> </table> <p>这直接决定了题目的难度曲线：拿 cookbook 里的标准操作（换量化、调 batch、开 CUDA graph）得分 ≈ 1.0x（和 baseline 一样快，零 headroom），想拿高分必须进入”无标准答案”的领域。</p> <h2 id="2-结构解剖四个角色各司其职">2. 结构解剖：四个角色各司其职</h2> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>inference-system-optimization/
+├── task.toml              # 声明：frontier 难度、4h agent、B200、断网
+├── instruction.md         # 题面：给 agent 看的全部信息
+├── environment/
+│   ├── Dockerfile         # 完整环境：CUDA 12.8 + torch 2.10 + SGLang + 全套 kernel 工具
+│   └── workspace/         # agent 的工作区（dev 工具链）
+│       ├── submission/launch_server.sh   # ← agent 唯一要交付的东西
+│       ├── run_dev_bench.py              # 公开 dev benchmark（和隐藏判分不同负载）
+│       ├── verify_serving.py             # 快速自检
+│       └── timer.sh                      # 计时守护进程
+├── solution/              # Oracle 解（fp8 + torch.compile + tuned CUDA graphs）
+└── tests/                 # 判分（agent 看不到）
+    ├── test.sh            # 预检 + 反作弊扫描 + 环境恢复
+    ├── launch_baseline.sh # verifier 自有的 baseline 启动脚本
+    ├── compute_reward.py  # 1049 行：四阶段判分流水线
+    └── prompts.jsonl      # 1166 条隐藏 prompt（正确性门禁的弹药）
+</code></pre></div></div> <p>几个值得单独说的设计：</p> <p><strong>交付物被刻意收敛成一个文件</strong>。agent 最终只需要留下 <code class="language-plaintext highlighter-rouge">/app/submission/launch_server.sh</code>——verifier 用它启动你的服务。这比”交出你改过的所有代码”高明：它把评测面收敛到一个可执行的入口，防止 agent 依赖环境里的脏状态（instruction 里还专门警告：直接改 site-packages 的修改 replay 时会丢，必须在 launch_server.sh 里重新应用）。</p> <p><strong>给 agent 配了完整的 dev 工具链，且明确告诉它 dev 负载和隐藏判分负载不同</strong>。<code class="language-plaintext highlighter-rouge">run_dev_bench.py</code> 是公开的，可以用来迭代；但 instruction 明说”The hidden verifier uses different workloads”——既给了反馈回路（不然 agent 瞎跑），又防止过拟合到 dev 负载。</p> <p><strong>计时守护进程</strong>（<code class="language-plaintext highlighter-rouge">timer.sh</code>）：agent 可以随时 <code class="language-plaintext highlighter-rouge">cat /app/.timer/remaining_secs</code> 查剩余时间，30/10/5 分钟有警告文件。这不是便利设施，是评测设计的一部分——<strong>它把”时间管理”变成了被考察的能力</strong>：agent 必须自己决定什么时候停止优化、留下足够时间跑最终验证。</p> <h2 id="3-判分流水线四阶段每阶段都有防御目标">3. 判分流水线：四阶段，每阶段都有防御目标</h2> <p><code class="language-plaintext highlighter-rouge">compute_reward.py</code> 的主流程是四阶段，我按顺序拆：</p> <h3 id="phase-1baseline-测速--收集参考输出">Phase 1：Baseline 测速 + 收集参考输出</h3> <p>先起 baseline 服务（verifier 自己的 <code class="language-plaintext highlighter-rouge">launch_baseline.sh</code>），在隐藏负载上测速，同时在 1166 条隐藏 prompt 上收集 greedy 输出作为正确性参考。</p> <p><strong>防御目标</strong>：baseline 是 verifier 自带的，agent 碰不到它——防止 agent 通过污染 baseline 来”提高自己的相对速度”。</p> <h3 id="phase-2candidate-正确性门禁--测速">Phase 2：Candidate 正确性门禁 → 测速</h3> <p>起 agent 的服务，先在同样的 1166 条 prompt 上收集输出，做 <strong>token 级比对</strong>（按空白分词，计算最长公共前缀比例），要求平均匹配率 ≥ 0.95。<strong>不过门禁，直接 0 分，速度根本不测。</strong></p> <p>这是整个判分里最重要的一道闸。它防的是所有”牺牲正确性换速度”的作弊路径：乱搞量化把模型搞废、投机解码太激进导致输出漂移、改 kernel 引入数值错误。注意阈值设的 0.95 而不是 1.0——给合法的数值抖动（fp8 vs bf16 的合理差异）留了空间，这是跑过真实数据后校准出来的工程判断。</p> <p>过了门禁才测速：隐藏负载矩阵是 ISL/OSL 四象限（短入短出/长入短出/短入长出/长入长出）+ 一个推理题 + 并发负载（4 并发、8 并发）。<strong>单点快没用，必须全象限都快</strong>——专门防”只对某种负载过拟合”（比如只对长文本优化了 prefill，短文本反而慢了）。</p> <h3 id="phase-3baseline-复测">Phase 3：Baseline 复测</h3> <p>candidate 测完，把 baseline 再测一遍。如果两次 baseline 结果漂移超过 30%，打 variance flag。</p> <p><strong>防御目标</strong>：检测环境不稳定（GPU 热降频、agent 残留的进程污染了环境）。这是真实跑过 benchmark 的人才会加的检查——他们注释里写了，之前踩过”残留 triton cache 导致 5-8% 方差”的坑，所以现在 test.sh 里会<strong>先恢复干净的 SGLang 包（tar 快照还原）、清所有 <code class="language-plaintext highlighter-rouge">__pycache__</code> 和 triton cache、pkill 残留的 GPU 进程</strong>，再开始判分。</p> <h3 id="phase-4几何平均加速比">Phase 4：几何平均加速比</h3> <p>所有负载的加速比（baseline 中位延迟 / candidate 中位延迟）做<strong>几何平均</strong>。几何平均而不是算术平均的选择是有讲究的：它惩罚短板——一个负载 3x、另一个 0.3x，算术平均 1.65 看着还行，几何平均只有 0.95 直接打回原形。<strong>鼓励均衡优化，惩罚顾此失彼。</strong></p> <h2 id="4-防作弊武器库七个机制">4. 防作弊武器库：七个机制</h2> <p>把散在各处的防御集中看，这道题对 agent 作弊路径的封锁是体系化的：</p> <table> <thead> <tr> <th>机制</th> <th>位置</th> <th>防什么</th> </tr> </thead> <tbody> <tr> <td>隐藏 prompt 集（1166 条，含对抗/退化输入）</td> <td>tests/</td> <td>过拟合 dev 负载、背题</td> </tr> <tr> <td>token 级正确性门禁（≥0.95）</td> <td>compute_reward.py</td> <td>牺牲质量换速度</td> </tr> <tr> <td>baseline 由 verifier 私有启动</td> <td>launch_baseline.sh</td> <td>污染 baseline 抬高相对分</td> </tr> <tr> <td>源码扫描（grep <code class="language-plaintext highlighter-rouge">/tests/</code>、<code class="language-plaintext highlighter-rouge">compute_reward</code>、<code class="language-plaintext highlighter-rouge">reward.json</code>）</td> <td>test.sh 预检</td> <td>直接读判分逻辑/答案</td> </tr> <tr> <td>环境恢复（tar 还原 + 清缓存 + 杀残留进程）</td> <td>test.sh</td> <td>环境污染、脏状态影响判分</td> </tr> <tr> <td>baseline 复测 + 漂移检测（&gt;30% 打 flag）</td> <td>Phase 3</td> <td>环境不稳定、计时操纵</td> </tr> <tr> <td>提交物收敛为单入口脚本</td> <td>instruction.md</td> <td>依赖不可复现的环境脏状态</td> </tr> </tbody> </table> <p>还有一个有意思的细节：<code class="language-plaintext highlighter-rouge">test.sh</code> 会往 SGLang 的启动命令里<strong>自动注入 <code class="language-plaintext highlighter-rouge">--skip-server-warmup</code></strong>——因为 SGLang 内部 warmup 有硬编码的 600s 超时，重配置下会误杀自己的服务，而 verifier 自己实现了更稳的三段式就绪检查（TCP 端口 → <code class="language-plaintext highlighter-rouge">/v1/models</code> → 真实生成一次）。这说明这套判分是被反复真实运行打磨过的，不是纸面设计。</p> <h2 id="5-对国产-infra-benchmark-的七点借鉴">5. 对国产 infra benchmark 的七点借鉴</h2> <p>对着这道题，我们能直接抄走的：</p> <p><strong>1. “打满配 baseline”是难度设计的第一性原理。</strong> 我们之前那道 vendor-alias 题、以及所有”诊断类”题，baseline 其实就是”坏了的系统”，agent 修好就满分——天花板有限。性能题的正确形态是 baseline 已经很好，逼 agent 进入无标准答案区。国产卡版本：给一个官方推荐配置全开的 vLLM-Ascend / SGLang NPU baseline，让 agent 去打它。</p> <p><strong>2. 正确性门禁先于速度，且阈值要校准不要拍脑袋。</strong> 0.95 是跑出来的。我们出国产卡题时，token match 阈值必须在真卡上实测（不同硬件数值行为不同，昇腾和 NVIDIA 的 fp 行为差异会直接影响这个值）。</p> <p><strong>3. 判分负载矩阵要覆盖 ISL/OSL 四象限 + 并发。</strong> 这是 InferenceMAX 的标准方法论，直接搬。国产卡推理题尤其需要——不同后端在 prefill-heavy 和 decode-heavy 下的瓶颈完全不同（CSA/FlashAttention 行为差异大）。</p> <p><strong>4. 环境恢复是判分可信度的一半。</strong> tar 快照还原 + 清 pycache/triton cache + pkill GPU 残留进程，这三件套我们一道题都不能少。我们自己踩过”公共池互踩”的坑（松江 PPU 128 卡 benchmark 被别人 pkill 误伤），对这点应该有切肤之痛。</p> <p><strong>5. 提交物收敛为单入口。</strong> 我们的 gpt350-mfu-race 用了 <code class="language-plaintext highlighter-rouge">entrypoint.sh</code>，是对的做法；但要补上”site-packages 修改 replay 会丢”的明确警告和 launch 时重新应用的机制。</p> <p><strong>6. 计时守护进程让”时间管理”成为考点。</strong> 成本几乎为零（一个 20 行 shell 循环），但把”什么时候该停止优化、什么时候该留时间验证”这个真实工程判断纳入了评测。</p> <p><strong>7. 几何平均 + 复测漂移检测 = 分数的抗操纵性。</strong> 特别是复测——我们 PPU benchmark 运维里被”公共池互踩”搞过，环境漂移是国产集群的常态，这条对我们比对他们还重要。</p> <h2 id="6-一个冷静的评估哪些不能直接抄">6. 一个冷静的评估：哪些不能直接抄</h2> <ul> <li> <strong>B200 级别的环境依赖</strong>：这题镜像 80GB、128GB 内存、1 张 B200。国产卡版本要重新设计资源规格（910B 的显存 64GB，模型选型要缩）；</li> <li> <strong>job.yaml 里那套多 agent 混跑</strong>（claude-code / codex / gemini / qwen 同题并发）：这是他们运营 leaderboard 的基础设施，我们阶段还不需要；</li> <li> <strong>1166 条 prompt 的生成管线</strong>（<code class="language-plaintext highlighter-rouge">generate_prompts.py</code> 794 行）：可以用，但正确性门禁的 prompt 里要加中文和国产场景（他们的 prompt 偏英文通用）。</li> </ul> <h2 id="7-和我们自己的题对照">7. 和我们自己的题对照</h2> <p>我们已交付的 <code class="language-plaintext highlighter-rouge">metax-gemm-silent-fallback</code> 是<strong>诊断题</strong>（修复一个静默 bug，0/1 判分），这道是<strong>优化题</strong>（连续分数，打满配 baseline）——正好是两个互补的题型。FrontierSWE 的 17 道题里也是这个配比：实现类（写类型检查器、写编译器）+ 性能类（FFmpeg 优化、推理优化）+ ML 研究类。我们的 benchmark 也应该按这个矩阵铺开，而不是全是诊断题。</p> <p>参考：<a href="https://frontierswe.com" rel="external nofollow noopener" target="_blank">FrontierSWE 官网</a> · <a href="https://github.com/cjwystz/frontier-swe-chenjiawei/tree/main/tasks/inference-system-optimization" rel="external nofollow noopener" target="_blank">本题源码</a> · 我们的实践：<a href="/blog/2026/harbor-infra-benchmark-first-task/">把一次真实事故变成 AI 考题</a></p> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/harbor-infra-benchmark-first-task/">把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-npu-moe-fp32-pr/">追一个静默精度 bug：我给 SGLang 提 PR 的完整记录</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-ascend-910b-deploy/">昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/welcome/">欢迎来到我的大模型系统笔记</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2025/rag-optimized-t2i/">RAG 优化文生图——不动模型，修复提示词错位</a> </li> </ul> </div> </div> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "publications by categories in reversed chronological order. generated by jekyll-scholar.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Edit the `_data/repositories.yml` and change the `github_users` and `github_repos` lists to include your own GitHub profile and repositories.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "This is a description of the page. You can modify it in &#39;_pages/cv.md&#39;. You can also change or remove the top pdf download button.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-解剖一道顶级-agentic-考题-frontierswe-推理优化题的设计艺术",
+        
+          title: "解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术",
+        
+        description: "逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/frontierswe-inference-task-anatomy/";
+          
+        },
+      },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-mlsys-2027-submission-in-progress-heterogeneous-modeling-packing-scheduling-for-general-llm-training-qingcheng-jizhi-ustb-co-first-author-to-be-submitted-in-oct-2026",
+          title: 'MLSys 2027 submission in progress: heterogeneous-modeling Packing scheduling for general LLM training (Qingcheng...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "Training-framework contributions for the MetaX ecosystem (4k+ stars)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
