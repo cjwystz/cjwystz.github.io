@@ -56,6 +56,11 @@ on:
       - "!docs/INSTALL.md"
       - "!README.md"
   workflow_dispatch:
+  # Nightly rebuild at 00:05 Beijing time (16:05 UTC) so future-dated posts
+  # (frontmatter date = tomorrow 00:00 +0800) go live on schedule without a
+  # manual push. Push-triggered builds are unchanged.
+  schedule:
+    - cron: "5 16 * * *"
 
 permissions:
   contents: write
