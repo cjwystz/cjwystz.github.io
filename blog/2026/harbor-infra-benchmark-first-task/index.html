@@ -1,0 +1,235 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> 把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题 | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及" verify> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/harbor-infra-benchmark-first-task/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题</h1> <p class="post-meta"> 发布于 2026 年 10 月 2 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/benchmark"> <i class="fa-solid fa-hashtag fa-sm"></i> benchmark</a>   <a href="/blog/tag/harbor"> <i class="fa-solid fa-hashtag fa-sm"></i> harbor</a>   <a href="/blog/tag/ai-infra"> <i class="fa-solid fa-hashtag fa-sm"></i> ai-infra</a>   <a href="/blog/tag/python"> <i class="fa-solid fa-hashtag fa-sm"></i> python</a>   <a href="/blog/tag/debugging"> <i class="fa-solid fa-hashtag fa-sm"></i> debugging</a>   ·   <a href="/blog/category/engineering"> <i class="fa-solid fa-tag fa-sm"></i> engineering</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#1-%E7%BC%98%E8%B5%B7rl-%E6%97%B6%E4%BB%A3%E9%9C%80%E8%A6%81%E4%BB%80%E4%B9%88%E6%A0%B7%E7%9A%84%E9%A2%98">1. 缘起：RL 时代需要什么样的”题”</a></li> <li class="toc-entry toc-h2"><a href="#2-%E4%BA%8B%E6%95%85%E8%BF%98%E5%8E%9F%E4%B8%80%E6%AC%A1-vendor-%E5%BA%93%E5%8D%87%E7%BA%A7%E5%BC%95%E5%8F%91%E7%9A%84%E9%9D%99%E9%BB%98%E6%95%85%E9%9A%9C">2. 事故还原：一次 vendor 库升级引发的静默故障</a></li> <li class="toc-entry toc-h2"> <a href="#3-bug-%E5%8E%9F%E7%90%86%E4%B8%89%E5%B1%82-python-import-%E6%9C%BA%E5%88%B6%E5%8F%A0%E5%8A%A0%E7%9A%84%E5%9D%91">3. Bug 原理：三层 Python import 机制叠加的坑</a> <ul> <li class="toc-entry toc-h3"><a href="#31-sysmodules-%E6%98%AF-import-%E7%B3%BB%E7%BB%9F%E7%9A%84%E6%B3%A8%E5%86%8C%E8%A1%A8">3.1 sys.modules 是 import 系统的注册表</a></li> <li class="toc-entry toc-h3"><a href="#32-%E5%8D%95%E9%98%B6%E6%AE%B5%E5%88%9D%E5%A7%8B%E5%8C%96%E7%9A%84-c-%E6%89%A9%E5%B1%95%E4%BC%9A%E8%87%AA%E6%88%91%E6%B3%A8%E5%86%8C">3.2 单阶段初始化的 C 扩展会”自我注册”</a></li> <li class="toc-entry toc-h3"><a href="#33-%E6%9D%A1%E4%BB%B6%E6%81%A2%E5%A4%8D%E5%8F%AA%E5%AF%B9%E4%BC%9A%E8%87%AA%E6%88%91%E6%B3%A8%E5%86%8C%E7%9A%84%E4%B8%96%E7%95%8C%E5%81%9A%E4%BA%86%E9%98%B2%E5%BE%A1">3.3 条件恢复：只对”会自我注册”的世界做了防御</a></li> </ul> </li> <li class="toc-entry toc-h2"> <a href="#4-%E4%BB%8E%E4%BA%8B%E6%95%85%E5%88%B0%E8%80%83%E9%A2%98harbor-%E4%BB%BB%E5%8A%A1%E8%AE%BE%E8%AE%A1">4. 从事故到考题：Harbor 任务设计</a> <ul> <li class="toc-entry toc-h3"><a href="#41-%E7%8E%AF%E5%A2%83%E6%9D%A1%E4%BB%B6%E5%BF%85%E9%A1%BB%E7%BB%99%E5%85%A8">4.1 环境：条件必须给全</a></li> <li class="toc-entry toc-h3"><a href="#42-%E5%88%A4%E5%88%86%E8%A1%8C%E4%B8%BA%E5%A5%91%E7%BA%A6--%E5%8F%8D%E4%BD%9C%E5%BC%8A">4.2 判分：行为契约 + 反作弊</a></li> <li class="toc-entry toc-h3"><a href="#43-oracle-%E8%A7%A3">4.3 Oracle 解</a></li> </ul> </li> <li class="toc-entry toc-h2"><a href="#5-%E4%BB%80%E4%B9%88%E7%AE%97%E4%B8%80%E9%81%93%E5%A5%BD%E9%A2%98%E7%9B%AE%E5%89%8D%E7%9A%84%E4%BD%93%E4%BC%9A">5. 什么算一道好题（目前的体会）</a></li> <li class="toc-entry toc-h2"><a href="#6-%E5%92%8C%E4%B8%BB%E7%BA%BF%E5%B7%A5%E4%BD%9C%E7%9A%84%E5%85%B3%E7%B3%BB">6. 和主线工作的关系</a></li> </ul> </div> <hr> <div id="markdown-content"> <p>TL;DR：</p> <ul> <li>一位在头部大模型公司做 RL 的朋友找我出题：<strong>把真实踩过的 infra 坑做成 agentic benchmark</strong>——给 AI agent 的”工程能力考题”，格式用 Harbor；</li> <li>第一道题选了我在国产 GPU 平台适配中的真实事故：vendor 库升级（torch2.8 → torch2.10 构建）后 <code class="language-plaintext highlighter-rouge">import transformer_engine.pytorch</code> 静默炸掉，根因是一个关于 <code class="language-plaintext highlighter-rouge">sys.modules</code> 别名的条件恢复 bug；</li> <li>本文讲三件事：事故本身的技术原理、怎么把它变成可自动判分的题、以及为什么”不要 GT、只要 verify”。</li> </ul> <h2 id="1-缘起rl-时代需要什么样的题">1. 缘起：RL 时代需要什么样的”题”</h2> <p>先交代背景。做 agent/RL 训练的人现在最缺的不是模型，是<strong>任务数据</strong>——而且是”能自动判分”的任务。这是范式转变：</p> <ul> <li> <strong>老范式（给 GT）</strong>：训练数据 = 题目 + 标准答案，模型模仿答案。问题是复杂工程问题的标注成本极高，人类自己都未必判得对错；</li> <li> <strong>新范式（给 verifier）</strong>：训练数据 = 题目 + 判分器。不告诉模型正确答案，只告诉它”怎么算对”，让它自己探索，判分器给奖励。</li> </ul> <p>对出题人的要求也随之改变：<strong>不需要你会解这道题，只需要你会判分</strong>。而”解不出来但有明确判据”的题，恰恰是系统方向最富集的矿——部署踩坑、升级翻车、性能回退，每个都有现成的复现环境和客观的判据（服务通不通、测试过不过、速度快不快）。</p> <p>朋友的原话：”把你们工作里觉得困难的问题转成题，难度无所谓，只要题干无歧义、答案可以 verify。”于是有了这第一道题。</p> <h2 id="2-事故还原一次-vendor-库升级引发的静默故障">2. 事故还原：一次 vendor 库升级引发的静默故障</h2> <p>事故发生在国产 GPU 平台的训练框架适配工作中。架构是两层：</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>上层：TEFL（TransformerEngine 封装层）
+  └─ transformer_engine.pytorch.*   ← 训练脚本 import 的公开 API
+        └─ import transformer_engine_torch   ← "dispatch 模块"，负责转发
+下层：vendor 预编译 C 扩展（.so，厂商闭源交付，按 torch 版本出多个 build）
+  └─ transformer_engine_torch.so   ← 注意：和 dispatch 模块同名！
+</code></pre></div></div> <p>某天 CI 把 vendor 包从 torch2.8 构建切到 torch2.10 构建，冒烟测试开始挂：</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ModuleNotFoundError: No module named 'transformer_engine_torch'
+</code></pre></div></div> <p>诡异的是：torch2.8 构建一切正常，两个构建的 .so 都好好躺在磁盘上，而且<strong>回退就能好</strong>——但不能回退，torch2.10 构建修了另一个我们需要的数值 bug。</p> <h2 id="3-bug-原理三层-python-import-机制叠加的坑">3. Bug 原理：三层 Python import 机制叠加的坑</h2> <p>这道题的难度全在”诊断”——修复本身只有两行，但定位要理解三件事。</p> <h3 id="31-sysmodules-是-import-系统的注册表">3.1 sys.modules 是 import 系统的注册表</h3> <p><code class="language-plaintext highlighter-rouge">import transformer_engine_torch</code> 时，Python 先查 <code class="language-plaintext highlighter-rouge">sys.modules</code> 字典：命中就直接返回缓存的模块对象，不命中才走查找-加载-注册流程。TEFL 的 dispatch 模块是包初始化时<strong>手动注册</strong>进去的：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># transformer_engine/plugin/core/_module_setup.py
+</span><span class="n">dispatch</span> <span class="o">=</span> <span class="n">types</span><span class="p">.</span><span class="nc">ModuleType</span><span class="p">(</span><span class="sh">"</span><span class="s">transformer_engine_torch</span><span class="sh">"</span><span class="p">)</span>
+<span class="n">dispatch</span><span class="p">.</span><span class="n">__getattr__</span> <span class="o">=</span> <span class="n">forward_to_vendor_backend</span>   <span class="c1"># 属性访问转发给 vendor 后端
+</span><span class="n">sys</span><span class="p">.</span><span class="n">modules</span><span class="p">[</span><span class="sh">"</span><span class="s">transformer_engine_torch</span><span class="sh">"</span><span class="p">]</span> <span class="o">=</span> <span class="n">dispatch</span>  <span class="c1"># 注册别名
+</span></code></pre></div></div> <p>所以业务代码 <code class="language-plaintext highlighter-rouge">import transformer_engine_torch</code> 拿到的其实是这个转发器。</p> <h3 id="32-单阶段初始化的-c-扩展会自我注册">3.2 单阶段初始化的 C 扩展会”自我注册”</h3> <p>加载 vendor 的 <code class="language-plaintext highlighter-rouge">.so</code> 用的是按路径加载：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="p">.</span><span class="n">util</span><span class="p">.</span><span class="nf">spec_from_file_location</span><span class="p">(</span><span class="sh">"</span><span class="s">transformer_engine_torch</span><span class="sh">"</span><span class="p">,</span> <span class="n">so_path</span><span class="p">)</span>
+<span class="n">mod</span> <span class="o">=</span> <span class="n">importlib</span><span class="p">.</span><span class="n">util</span><span class="p">.</span><span class="nf">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+<span class="n">spec</span><span class="p">.</span><span class="n">loader</span><span class="p">.</span><span class="nf">exec_module</span><span class="p">(</span><span class="n">mod</span><span class="p">)</span>
+</code></pre></div></div> <p>关键点：<strong>老式单阶段初始化（single-phase init）的 C 扩展，在 exec_module 期间会把自己的模块对象塞进 <code class="language-plaintext highlighter-rouge">sys.modules</code></strong>——名字取它的 PyInit 符号名 <code class="language-plaintext highlighter-rouge">transformer_engine_torch</code>。也就是说，vendor 的 torch2.8 构建加载时会<strong>挤掉</strong>我们刚注册的 dispatch 别名。</p> <p>而 torch2.10 构建（多阶段初始化）<strong>不会</strong>自我注册。同一厂商、不同构建，行为不同。</p> <h3 id="33-条件恢复只对会自我注册的世界做了防御">3.3 条件恢复：只对”会自我注册”的世界做了防御</h3> <p>当年的 loader 作者知道扩展会挤别名，于是写了”先存后还”：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">saved_owner</span> <span class="o">=</span> <span class="n">sys</span><span class="p">.</span><span class="n">modules</span><span class="p">.</span><span class="nf">pop</span><span class="p">(</span><span class="n">_ALIAS</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>   <span class="c1"># 先把 dispatch 别名摘下来保管
+</span><span class="n">spec</span><span class="p">.</span><span class="n">loader</span><span class="p">.</span><span class="nf">exec_module</span><span class="p">(</span><span class="n">mod</span><span class="p">)</span>                  <span class="c1"># 加载扩展（可能把别名挤走）
+</span><span class="bp">...</span>
+<span class="k">if</span> <span class="n">sys</span><span class="p">.</span><span class="n">modules</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="n">_ALIAS</span><span class="p">)</span> <span class="ow">is</span> <span class="n">mod</span><span class="p">:</span>            <span class="c1"># 只有"被挤了"才恢复
+</span>    <span class="k">if</span> <span class="n">saved_owner</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">sys</span><span class="p">.</span><span class="n">modules</span><span class="p">[</span><span class="n">_ALIAS</span><span class="p">]</span> <span class="o">=</span> <span class="n">saved_owner</span>
+</code></pre></div></div> <p>torch2.8 时代：扩展自我注册 → 条件命中 → 别名恢复 → 一切正常。</p> <p>torch2.10 时代：扩展<strong>不</strong>自我注册 → 条件不命中 → <strong><code class="language-plaintext highlighter-rouge">pop</code> 出去的别名永远没还回来</strong> → 下游 <code class="language-plaintext highlighter-rouge">import transformer_engine_torch</code> 找不到模块 → ModuleNotFoundError。</p> <p>防御逻辑和攻击面错位了：代码防的是”扩展会挤别名”，真实事故却是”别名被自己 pop 了之后没人还”。修复就是让恢复<strong>无条件</strong>发生：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="n">saved_owner</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+    <span class="n">sys</span><span class="p">.</span><span class="n">modules</span><span class="p">[</span><span class="n">_ALIAS</span><span class="p">]</span> <span class="o">=</span> <span class="n">saved_owner</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">sys</span><span class="p">.</span><span class="n">modules</span><span class="p">.</span><span class="nf">pop</span><span class="p">(</span><span class="n">_ALIAS</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+</code></pre></div></div> <h2 id="4-从事故到考题harbor-任务设计">4. 从事故到考题：Harbor 任务设计</h2> <p>真实事故的环境（内部 vendor 包）带不出来，所以题目对现场做了<strong>等比缩放重建</strong>——保留事故的完整因果链，去掉所有外部依赖。</p> <h3 id="41-环境条件必须给全">4.1 环境：条件必须给全</h3> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>environment/
+├── Dockerfile                    # 构建期用 gcc 现编两个"vendor 扩展"
+├── vendor_ext/
+│   ├── tex_torch28.c             # 单阶段初始化（会自我注册）
+│   ├── tex_torch210.c            # 多阶段初始化（不自我注册）
+│   └── build_all.sh              # 产出两个 build 目录 + installed 符号链接
+└── app/                          # 完整可跑的 TEFL 封装层
+    ├── run_smoke.py              # 冒烟入口（必挂）
+    ├── logs/crash_torch210.log   # 完整报错堆栈
+    └── transformer_engine/...    # dispatch 安装、vendor loader、公开 API
+</code></pre></div></div> <p>两个”vendor 扩展”是 Docker 构建时现场编译的真 C 扩展，行为差异（是否自我注册）由 C 代码保证——这样判分脚本可以把”扩展行为”当作<strong>环境事实</strong>来钉，而不信任任何 Python 层的状态。容器里自带复现所需的全部东西，agent 不需要访问任何外部资源。</p> <h3 id="42-判分行为契约--反作弊">4.2 判分：行为契约 + 反作弊</h3> <p><code class="language-plaintext highlighter-rouge">tests/test.sh</code> → pytest，<strong>每个检查都在全新子进程里跑</strong>（import 状态不能跨检查泄漏，和真实训练任务启动条件一致）。判分点设计：</p> <table> <thead> <tr> <th>检查</th> <th>性质</th> </tr> </thead> <tbody> <tr> <td>torch2.10 扩展不自我注册、torch2.8 自我注册</td> <td> <strong>反作弊</strong>：钉死环境事实，agent 重编/替换 .so 会被抓</td> </tr> <tr> <td> <code class="language-plaintext highlighter-rouge">run_smoke.py</code> 输出 SMOKE OK</td> <td>原始症状修复</td> </tr> <tr> <td>dispatch 别名 = 包初始化时安装的那个模块对象（<code class="language-plaintext highlighter-rouge">is</code> 同一性）</td> <td>防止自己 shadow 一个假模块顶名</td> </tr> <tr> <td>vendor 模块的 <code class="language-plaintext highlighter-rouge">__file__</code> 真实路径指向活跃 build 的 .so</td> <td>防止偷换 build</td> </tr> <tr> <td>通过别名访问能转发到 vendor 后端（git id 对得上）</td> <td>转发链完整性</td> </tr> <tr> <td>重复加载返回同一模块对象（扩展不被执行两次）</td> <td>幂等性</td> </tr> <tr> <td>以上全部对 torch2.8 build 同样成立</td> <td>防回归：不许”修了新版砸旧版”</td> </tr> </tbody> </table> <p>输出是多维的 <code class="language-plaintext highlighter-rouge">rewards.json</code>（每个检查独立计分）——比单一 0/1 更适合 RL 训练，agent 做到哪一步拿哪步的分。</p> <h3 id="43-oracle-解">4.3 Oracle 解</h3> <p><code class="language-plaintext highlighter-rouge">solution/solve.sh</code> 就是第 3.3 节那个两行 patch + 双 build 冒烟自检。它的存在不是给训练用，是<strong>证明这道题可解</strong>——这是任务入库前的质量门禁。</p> <h2 id="5-什么算一道好题目前的体会">5. 什么算一道好题（目前的体会）</h2> <ol> <li> <strong>难度来自诊断，不来自工作量</strong>。修复两行，定位要懂 import 机制。这种题区分的是”真懂系统”和”会补全代码”；</li> <li> <strong>判分锚点要钉在环境事实上</strong>，不钉在 agent 产出上。本题的锚是两个 C 扩展的自我注册行为——agent 改不了它，一改就被发现；</li> <li> <strong>反作弊和正判据一样重要</strong>。同名模块的题目天然诱导”shadow 一个假模块”的作弊路径，所以判分里有对象同一性、真实路径、幂等性三道锁；</li> <li> <strong>多维奖励 &gt; 单维通过</strong>。对部分完成的 agent 给部分分，RL 信号更密；</li> <li> <strong>可解性必须自证</strong>。oracle 跑通是入库门槛，不是可选项——不可解的题对训练是纯噪声。</li> </ol> <p>本地四步验证（复现 bug → 判分拦截 → oracle 修复 → 判分全绿）已通过，接下来用真实 agent 端到端跑。后续候选题也在排队：多网卡 GLOO 组网超时（docker-compose 多容器）、vendor 通信库”伪 OOM”日志诊断、dispatcher 静默回退导致训练吞吐腰斩（这题判分就是跑分——”速度即 verify”）。</p> <h2 id="6-和主线工作的关系">6. 和主线工作的关系</h2> <p>这件事和我平时的活儿是同一条线：在国产芯片上踩的每一个坑，以前是”解决完就翻篇”，现在多了一条出路——<strong>沉淀成可复用的评测资产</strong>。部署 910B 的坑、调 MoE 的坑、这次的 vendor 库升级事故，都是同一个视角：把昂贵的、非公开可得的工程经验，转成可自动判分的题目。</p> <p>相关：<a href="https://github.com/laude-institute/harbor" rel="external nofollow noopener" target="_blank">Harbor 框架</a> · 同系列：<a href="/blog/2026/sglang-ascend-910b-deploy/">昇腾 910B 部署 SGLang 推理服务实战</a> · <a href="/blog/2026/sglang-npu-moe-fp32-pr/">追一个静默精度 bug：我给 SGLang 提 PR 的完整记录</a></p> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-npu-moe-fp32-pr/">追一个静默精度 bug：我给 SGLang 提 PR 的完整记录</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-ascend-910b-deploy/">昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/welcome/">欢迎来到我的大模型系统笔记</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2025/rag-optimized-t2i/">RAG 优化文生图——不动模型，修复提示词错位</a> </li> </ul> </div> </div> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "publications by categories in reversed chronological order. generated by jekyll-scholar.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Edit the `_data/repositories.yml` and change the `github_users` and `github_repos` lists to include your own GitHub profile and repositories.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "This is a description of the page. You can modify it in &#39;_pages/cv.md&#39;. You can also change or remove the top pdf download button.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-mlsys-2027-submission-in-progress-heterogeneous-modeling-packing-scheduling-for-general-llm-training-qingcheng-jizhi-ustb-co-first-author-to-be-submitted-in-oct-2026",
+          title: 'MLSys 2027 submission in progress: heterogeneous-modeling Packing scheduling for general LLM training (Qingcheng...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "Training-framework contributions for the MetaX ecosystem (4k+ stars)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
