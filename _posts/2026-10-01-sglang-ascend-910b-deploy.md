@@ -5,7 +5,6 @@ date: 2026-10-01 10:00:00 +0800
 categories: [engineering]
 tags: [ascend-910b, sglang, inference, ai-infra]
 description: 在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。
-featured: true
 mermaid:
   enabled: true
 toc:
