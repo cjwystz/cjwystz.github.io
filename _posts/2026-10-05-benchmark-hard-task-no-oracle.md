@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 100 秒被秒杀之后：我们把 benchmark 升级成了"没人会做的题"
-date: 2026-10-04 00:30:00 +0800
+date: 2026-10-05 00:00:00 +0800
 categories: [engineering]
 tags: [benchmark, harbor, ai-infra, 国产芯片, agent-evaluation]
 description: 国产 infra agentic benchmark 的第一次真机校准翻车实录——精心设计的 hard 题被当代模型 100 秒连过五次，复盘出"好题的三条反例"，然后转身做了一道连出题团队自己都没解出来的开放式性能题：32 卡国产 GPU 上把 27B 训练吞吐推过实测纪录。
