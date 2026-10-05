@@ -1,0 +1,240 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> 跑满 4 小时、零交卷、reward 0.0——但这不是躺平 | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="开放式性能题的第一次真实 agent 校准：DeepSeek-V4.1-Flash 驱动的 claude-code 在 4B FlagScale/沐曦题上 4 小时跑满、零交卷、reward 0.0——但 3079 条轨迹里是教科书级的双峰诊断、一次通信串行化的实锤，和 +47% 的真实吞吐提升。复盘两个坑（一个算我们的，一个算它的）、阈值决策，以及为什么 binary reward 会抹掉这次实验里最有价值的信息。"> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/benchmark-first-agent-calibration/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">跑满 4 小时、零交卷、reward 0.0——但这不是躺平</h1> <p class="post-meta"> 发布于 2026 年 10 月 6 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/benchmark"> <i class="fa-solid fa-hashtag fa-sm"></i> benchmark</a>   <a href="/blog/tag/harbor"> <i class="fa-solid fa-hashtag fa-sm"></i> harbor</a>   <a href="/blog/tag/ai-infra"> <i class="fa-solid fa-hashtag fa-sm"></i> ai-infra</a>   <a href="/blog/tag/%E5%9B%BD%E4%BA%A7%E8%8A%AF%E7%89%87"> <i class="fa-solid fa-hashtag fa-sm"></i> 国产芯片</a>   <a href="/blog/tag/agent-evaluation"> <i class="fa-solid fa-hashtag fa-sm"></i> agent-evaluation</a>   ·   <a href="/blog/category/engineering"> <i class="fa-solid fa-tag fa-sm"></i> engineering</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#1-%E6%88%98%E6%8A%A54-%E5%B0%8F%E6%97%B600%E9%9B%B6%E4%BA%A4%E5%8D%B7">1. 战报：4 小时，0.0，零交卷</a></li> <li class="toc-entry toc-h2"><a href="#2-%E4%B8%8D%E6%98%AF%E8%BA%BA%E5%B9%B3%E8%BD%A8%E8%BF%B9%E9%87%8C%E7%9A%84%E7%9C%9F%E5%AE%9E%E5%B7%A5%E4%BD%9C">2. 不是躺平：轨迹里的真实工作</a></li> <li class="toc-entry toc-h2"> <a href="#3-%E4%B8%A4%E4%B8%AA%E5%9D%91%E4%B8%80%E4%B8%AA%E7%AE%97%E6%88%91%E4%BB%AC%E7%9A%84%E4%B8%80%E4%B8%AA%E7%AE%97%E5%AE%83%E7%9A%84">3. 两个坑：一个算我们的，一个算它的</a> <ul> <li class="toc-entry toc-h3"><a href="#31-%E5%9D%91%E4%B8%80%E7%AE%97%E6%88%91%E4%BB%AC%E7%9A%84%E6%94%B9%E4%BA%86%E6%96%87%E4%BB%B6%E4%BD%86%E8%B7%91%E7%9A%84%E4%B8%8D%E6%98%AF%E5%AE%83">3.1 坑一（算我们的）：改了文件，但跑的不是它</a></li> <li class="toc-entry toc-h3"><a href="#32-%E5%9D%91%E4%BA%8C%E7%AE%97%E5%AE%83%E7%9A%84num_workers-%E8%B0%83%E5%8F%82%E6%89%93%E5%81%8F%E9%94%9A%E7%82%B9%E8%BF%98%E6%B2%A1%E6%8F%90%E9%80%9F">3.2 坑二（算它的）：num_workers 调参，打偏锚点还没提速</a></li> </ul> </li> <li class="toc-entry toc-h2"><a href="#4-%E6%A0%A1%E5%87%86%E7%BB%93%E8%AE%BA">4. 校准结论</a></li> <li class="toc-entry toc-h2"><a href="#5-%E8%AF%9A%E5%AE%9E%E5%A3%B0%E6%98%8E">5. 诚实声明</a></li> <li class="toc-entry toc-h2"><a href="#6-%E5%AD%A6%E5%88%B0%E7%9A%84%E4%BA%8B">6. 学到的事</a></li> </ul> </div> <hr> <div id="markdown-content"> <p>TL;DR：</p> <ul> <li>上一篇那道”连出题人都没解出来”的开放性能题，先在小规格上做了第一次真 agent 校准：<strong>4h budget 跑满、AgentTimeoutError、零交卷、reward 0.0</strong>；</li> <li>但翻完 3079 条轨迹：这不是躺平——双峰振荡诊断、MCCL 隔离基准实锤通信串行化、实测试到 <strong>~36.8 TFLOP/s/GPU（基线 24–25，+47%）</strong>，离阈值 40 只差 ~3.2；</li> <li>绊脚石有两个：一个算我们的（agent 改的入口文件根本没被 launcher 加载，环境透明度问题），一个算它的（num_workers 调参打偏 loss 锚点且没提速）；</li> <li>结论：<strong>阈值 40 不降</strong>，修好坑一后补跑 3 个 trial；判分协议改一条——记 best-checkpoint 连续分，不只看 binary。</li> </ul> <h2 id="1-战报4-小时00零交卷">1. 战报：4 小时，0.0，零交卷</h2> <p>先补一个上一篇没交代的设定：那道”27B / 85.9 → 87.0”的题其实有个小规格姊妹题——<strong>Qwen3.5-4B、FlagScale、沐曦 GPU</strong>，优化目标是把训练吞吐从基线 24–25 TFLOP/s/GPU 推到 <strong>≥40</strong>（约 1.6 倍）。小题用来快速校准，免得一上来就烧 32 卡的预算。</p> <p>第一次真实 agent 运行（DeepSeek-V4.1-Flash 驱动的 claude-code，4h budget）：</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>reward:      0.0
+终止方式:    AgentTimeoutError(4h 跑满)
+提交:        无(零交卷)
+轨迹:        3079 条
+最好成绩:    ~36.8 TFLOP/s/GPU(基线 24–25,+47%;距阈值 40 还差 ~3.2)
+</code></pre></div></div> <p>单看 reward 是完败。但上一篇说过，这道题两种结果都有产出——所以我把 3079 条轨迹翻了一遍。</p> <h2 id="2-不是躺平轨迹里的真实工作">2. 不是躺平：轨迹里的真实工作</h2> <p>三件事说明它是真在干：</p> <p><strong>隔离规则全程守住。</strong> 所有改动只在 <code class="language-plaintext highlighter-rouge">zzy_work/mywork</code> 副本里，原树零接触。上一篇判分器第六层”集群卫生入分”是从真实运维规矩搬来的，这条没白设计。</p> <p><strong>诊断方向专业，而且路径是教科书级的：</strong></p> <ol> <li>发现 iter 时间<strong>双峰振荡</strong>：1723–1880ms 与 2400–2600ms 两档交替出现，且是数据确定的、不是抖动——说明它区分了”噪声”和”结构性信号”；</li> <li>做了 <strong>MCCL 隔离基准</strong>：8.65GB fp32 ReduceScatter 单独跑只要 40.7ms，但训练里同一通信要 740ms——据此提出”通信被串行化”的假设。先隔离测量、再对比定位，这就是人类性能工程师的标准动作。</li> </ol> <p><strong>实测有真实进展。</strong> 试到的最优吞吐 ~36.8 TFLOP/s/GPU，+47% 不是纸面数字，是在真集群上跑出来的。离 40 差 3.2，题确实卡在 frontier 上——这正是我们设计它时想要的状态。</p> <h2 id="3-两个坑一个算我们的一个算它的">3. 两个坑：一个算我们的，一个算它的</h2> <p>时间耗光不是因为探索本身慢，是被两个坑吃掉的。这两个坑性质完全不同，必须分开记账。</p> <h3 id="31-坑一算我们的改了文件但跑的不是它">3.1 坑一（算我们的）：改了文件，但跑的不是它</h3> <p>DS 花了不少时间改自己副本里的 <code class="language-plaintext highlighter-rouge">train_qwen35.py</code>，但 launcher 启动时会 <strong>cd 进原树</strong>执行 <code class="language-plaintext highlighter-rouge">./flagscale/train/megatron/train_qwen35.py</code>——editable install + launcher 的路径解析，让”改自己的副本”这件事并不直接。它改的入口文件<strong>根本没被加载</strong>，真正生效的只有通过 PYTHONPATH 注入的 <code class="language-plaintext highlighter-rouge">training.py</code>。</p> <p>它后来意识到了这一点，准备去修 entrypoint（需要搞懂 MetaPathFinder 的注入机制），但时间已经不够了。</p> <p>这类摩擦在 FrontierSWE 的 QA panel 里会被单列为 task-induced friction，不计入模型能力——它测的是”能不能读懂 editable install 的加载链”，而不是”能不能优化吞吐”。<strong>这是题的环境透明度问题，记在我们头上，修题。</strong></p> <h3 id="32-坑二算它的num_workers-调参打偏锚点还没提速">3.2 坑二（算它的）：num_workers 调参，打偏锚点还没提速</h3> <p>另一条路是它自己走岔的：调 <code class="language-plaintext highlighter-rouge">num_workers</code> 不但没提速，还把 loss 锚点打偏了（12.954 vs 参考 13.019，超出 ±0.05 容差）。判分器的 loss 锚点层防的就是”用改数学/改数据路径换速度”，这一抓是判分器在正常工作。</p> <p>白试一条路的成本记在它自己头上。这类试错<strong>该保留</strong>——它区分的正是”会调”和”不会调”。</p> <h2 id="4-校准结论">4. 校准结论</h2> <p><strong>阈值 40 保持不动。</strong> DS 到 36.8 说明方向可达、题不是死题；差 3.2 说明它确实卡在 frontier 上。降到 35 就会把一道能区分头部模型的题降级成中档题，不划算。</p> <p><strong>按优化面分档，不按阈值分档。</strong> 4B 题的优化面在通信串行化（那个 740ms 的 MCCL），27B 题的在 partrecomp/selrecomp 重算方向——两题信号正交，各测一种能力，比”同一题两个难度档”信息量大。</p> <p><strong>修好坑一再补跑 3 个 trial</strong>（<code class="language-plaintext highlighter-rouge">run_trials_t4b.sh 3</code>），确认 36.8 是可复现还是单次运气。延长 budget 到 8h 暂时不做——这次时间是被坑吃掉的，不是被问题本身吃掉的，坑修了之后 4h 可能够。</p> <p><strong>判分协议改一条：记 best-checkpoint 连续分，不只看 binary。</strong> 36.8/40 ≈ 0.92 和”完全没动”在 0/1 计分下都是 0，但信息量天差地别。上一篇拆 FrontierSWE 时我们吐槽过它没披露”无提交 trial 怎么计分”——现在我们自己的 agent 也零交卷了，这个问题从别人的缺口变成了自己的待办。</p> <h2 id="5-诚实声明">5. 诚实声明</h2> <ul> <li> <strong>n=1。</strong> 36.8 是单 trial 结果，稳定性未验证，补跑之前一切都只是” calibration 的初步读数”；</li> <li>轨迹分析是人工读的（3079 条），归因可能有漏；</li> <li>坑一到底吃掉多少时间，没法从轨迹里精确切分，”不修它会怎样”无从得知——所以只能修完再跑，用对照回答。</li> </ul> <h2 id="6-学到的事">6. 学到的事</h2> <ul> <li> <strong>超时不是单一失败模式。</strong> 躺平、卡死、真干没干完，三种超时对题目的含义完全不同。这道题属于第三种——意味着题成立，而且 agent 的能力边界恰好落在阈值附近；</li> <li> <strong>环境摩擦力会污染难度信号。</strong> 如果不修坑一就再跑，3 个 trial 大概率卡在同一处——那测的是坑的复现性，不是模型的稳定性；</li> <li> <strong>“继续探索还是见好就收”是当代 agent 的通病。</strong> DS 这次零交卷，和 FrontierSWE 榜上那些”打算提交但一直干到预算耗尽”的模型是同一类失败。submit 机制（记录后可继续改、已交不丢）必须前置到题面里讲清楚，否则我们在为模型的”不交卷习惯”而不是”能力不足”记 0 分。</li> </ul> <p>系列：<a href="/blog/2026/harbor-infra-benchmark-first-task/">第一道题：vendor 库静默故障</a> · <a href="/blog/2026/frontierswe-inference-task-anatomy/">FrontierSWE 推理优化题解剖</a> · <a href="/blog/2026/benchmark-hard-task-no-oracle/">100 秒被秒杀之后：升级成”没人会做的题”</a></p> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-hard-task-no-oracle/">100 秒被秒杀之后：我们把 benchmark 升级成了"没人会做的题"</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/frontierswe-inference-task-anatomy/">解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/harbor-infra-benchmark-first-task/">把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-npu-moe-fp32-pr/">追一个静默精度 bug：我给 SGLang 提 PR 的完整记录</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-ascend-910b-deploy/">昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/welcome/">欢迎来到我的大模型系统笔记</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2025/rag-optimized-t2i/">RAG 优化文生图——不动模型，修复提示词错位</a> </li> </ul> </div> </div> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "publications by categories in reversed chronological order. generated by jekyll-scholar.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Edit the `_data/repositories.yml` and change the `github_users` and `github_repos` lists to include your own GitHub profile and repositories.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "This is a description of the page. You can modify it in &#39;_pages/cv.md&#39;. You can also change or remove the top pdf download button.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-跑满-4-小时-零交卷-reward-0-0-但这不是躺平",
+        
+          title: "跑满 4 小时、零交卷、reward 0.0——但这不是躺平",
+        
+        description: "开放式性能题的第一次真实 agent 校准：DeepSeek-V4.1-Flash 驱动的 claude-code 在 4B FlagScale/沐曦题上 4 小时跑满、零交卷、reward 0.0——但 3079 条轨迹里是教科书级的双峰诊断、一次通信串行化的实锤，和 +47% 的真实吞吐提升。复盘两个坑（一个算我们的，一个算它的）、阈值决策，以及为什么 binary reward 会抹掉这次实验里最有价值的信息。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-first-agent-calibration/";
+          
+        },
+      },{id: "post-100-秒被秒杀之后-我们把-benchmark-升级成了-quot-没人会做的题-quot",
+        
+          title: "100 秒被秒杀之后：我们把 benchmark 升级成了&quot;没人会做的题&quot;",
+        
+        description: "国产 infra agentic benchmark 的第一次真机校准翻车实录——精心设计的 hard 题被当代模型 100 秒连过五次，复盘出&quot;好题的三条反例&quot;，然后转身做了一道连出题团队自己都没解出来的开放式性能题：32 卡国产 GPU 上把 27B 训练吞吐推过实测纪录。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-hard-task-no-oracle/";
+          
+        },
+      },{id: "post-解剖一道顶级-agentic-考题-frontierswe-推理优化题的设计艺术",
+        
+          title: "解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术",
+        
+        description: "逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/frontierswe-inference-task-anatomy/";
+          
+        },
+      },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-mlsys-2027-submission-in-progress-heterogeneous-modeling-packing-scheduling-for-general-llm-training-qingcheng-jizhi-ustb-co-first-author-to-be-submitted-in-oct-2026",
+          title: 'MLSys 2027 submission in progress: heterogeneous-modeling Packing scheduling for general LLM training (Qingcheng...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "Training-framework contributions for the MetaX ecosystem (4k+ stars)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
