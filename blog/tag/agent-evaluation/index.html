@@ -64,7 +64,18 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/https:/github.com/cjwystz";
           },
-        },{id: "post-守真-而非逐假-ai-生成图像检测为什么总是慢半拍",
+        },{id: "post-在-910b-上把-llm-推理的-quot-前菜-quot-和-quot-主菜-quot-分开炒-pd-分离实测",
+        
+          title: "在 910B 上把 LLM 推理的&quot;前菜&quot;和&quot;主菜&quot;分开炒——PD 分离实测",
+        
+        description: "在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B 上做了真机 PD 的配比实验：7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b-prefill-decode-disaggregation/";
+          
+        },
+      },{id: "post-守真-而非逐假-ai-生成图像检测为什么总是慢半拍",
         
           title: "守真，而非逐假——AI 生成图像检测为什么总是慢半拍",
         
