@@ -1,15 +1,15 @@
 ---
 layout: post
-title: 在 910B 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测
+title: 在 910B3 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测
 date: 2026-10-08 00:00:00 +0800
 categories: [inference, llm-serving]
-tags: [prefill-decode-disaggregation, ascend-910b, sglang, llm-inference, memfabric, serving, blog]
-description: 在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B 上做了真机 PD 的配比实验：7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。
+tags: [prefill-decode-disaggregation, ascend-910b3, sglang, llm-inference, memfabric, serving, blog]
+description: 在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B3 上做了真机 PD 的配比实验:7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。
 toc:
   beginning: true
 ---
 
-> 硬件:4×Atlas 800T A2(910B3,单卡 64GB HBM)中的一台,8 卡,留 1 卡给别人的 CV 任务,实际用 7 卡。
+> 硬件:Atlas 800T A2 训练服务器,单机 8×910B3(单卡 64GB HBM);其中 1 卡留给别人的 CV 任务,实际使用 7 卡。
 > 软件:sglang v0.5.18 + CANN 9.0.0(Ascend 官方 sglang 镜像),PD 传输走 ascend 后端(底层是华为 memfabric_hybrid)。
 > 模型:Qwen3-8B(dense)。负载:输入 ~500 token / 输出 ~200 token,泊松到达。
 > 结论先行:**在 8 并发下,把 7 张卡切成 3 张专做 prefill、4 张专做 decode,比 7 张卡"一锅炒"的吞吐高 11%,单卡效率也同步高 11%。但配比切错(只给 1 张 prefill)会把 TTFT 尾延迟打到 9 秒。**
@@ -54,7 +54,7 @@ toc:
 
 "真机 PD"指的是 **prefill 和 decode 跑在不同的物理卡(甚至不同物理机)上**,各有各的显存和算力,彻底不互相干扰。这也是本次实验采用的方式:
 
-- prefill 实例和 decode 实例各占独立的 910B 卡;
+- prefill 实例和 decode 实例各占独立的 910B3 卡;
 - KV cache 要**跨卡真传**——本次走的是华为 ascend 传输后端,底层是 memfabric_hybrid(基于 `ASCEND_MF_STORE_URL` 指向的共享内存/高速存储通道),不是简单的同卡指针;
 - 需要一个真正的 KV 传输后端(mooncake / nixl / ascend / ascend+memfabric 等),而这是落地时最容易卡住的地方——本集群无外网,mooncake 和 nixl 都没装,**只有 Ascend 官方镜像自带的 ascend 后端可用**,于是直接用官方的 PD 配方。
 
@@ -140,7 +140,7 @@ pd_3p4d-rps8     8.0  788   0    118.8    107.7    223.5    17.61     17.62    1
 
 ## 五、三个结论(都可以写进博客标题)
 
-![图1:输出吞吐 vs 并发](/assets/img/blog/fig1_throughput.png)
+<img src="/assets/img/blog/fig1_throughput.png" alt="图1:输出吞吐 vs 并发" style="display:block;margin:1em auto;max-width:68%;height:auto;border-radius:6px;" />
 
 ### 1. 配比切错,prefill 立刻成为瓶颈,尾延迟爆炸
 
@@ -148,17 +148,17 @@ pd_3p4d-rps8     8.0  788   0    118.8    107.7    223.5    17.61     17.62    1
 
 ### 2. 多一张 prefill 卡,立刻根治尾延迟
 
-![图2:TTFT 尾延迟 p99(对数轴)](/assets/img/blog/fig2_ttft_p99.png)
+<img src="/assets/img/blog/fig2_ttft_p99.png" alt="图2:TTFT 尾延迟 p99(对数轴)" style="display:block;margin:1em auto;max-width:68%;height:auto;border-radius:6px;" />
 
-![图3:TTFT p50](/assets/img/blog/fig3_ttft_p50.png)
+<img src="/assets/img/blog/fig3_ttft_p50.png" alt="图3:TTFT p50" style="display:block;margin:1em auto;max-width:68%;height:auto;border-radius:6px;" />
 
 把 prefill 从 1 张加到 2 张(2P:5D),rps=4 的 **TTFT p99 从 9018ms 砍到 245ms**,p50 也回到 102ms。说明在这个负载下 2 张 prefill 卡已经够用。配比是 PD 分离的第一调参旋钮,而它的代价极小——往往只差一张卡。
 
 ### 3. 高负载下,PD 分离的吞吐和单卡效率双双反超一体化
 
-![图5:单卡效率对比](/assets/img/blog/fig5_percard.png)
+<img src="/assets/img/blog/fig5_percard.png" alt="图5:单卡效率对比" style="display:block;margin:1em auto;max-width:68%;height:auto;border-radius:6px;" />
 
-![图4:TPOT p50 稳定性](/assets/img/blog/fig4_tpot.png)
+<img src="/assets/img/blog/fig4_tpot.png" alt="图4:TPOT p50 稳定性" style="display:block;margin:1em auto;max-width:68%;height:auto;border-radius:6px;" />
 
 看 rps=8(最接近真实服务压力)这一档:
 
