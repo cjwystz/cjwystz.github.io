@@ -9,6 +9,9 @@ toc:
   beginning: true
 ---
 
+> **2026-10-08 实验复核补充：**原文 10.2× 的计时包含全设备等待，不能直接解释为 decode 自身延迟；利用率画像也不足以单独确定内存争抢根因。详见[后续实验复核](/blog/2026/ascend-910b3-inference-audit-negative-results/)。
+
+
 > 承接上一篇《在 910B3 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测》。
 > 硬件:Atlas 800T A2,单卡 Ascend 910B3(64GB HBM)。软件:CANN 9.0.0 + torch_npu 2.10,profiling 用自带的 msprof。
 > 结论先行:**同一个 MatMul 算子,prefill 负载下 Cube 占用 0.92、decode 负载下只有 0.14;decode 侧数据搬运通道 MTE2 被打到 0.99。** 两者在卡上同时跑,decode 每步延迟从 0.222ms 涨到 2.264ms——**慢 10.2 倍**。PD 分离论文里那句"prefill 干扰 decode",在 NPU 上可以被拆成具体的执行单元争抢,而不是一个含糊的定性断言。

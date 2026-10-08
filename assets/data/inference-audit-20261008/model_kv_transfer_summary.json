@@ -1,0 +1,92 @@
+{
+  "model_step_qwen8_h2d_kv4096.jsonl": {
+    "alone": {
+      "repeats": 5,
+      "first_decode_ms": 20.492335510253906,
+      "mean_decode_ms": 20.481410675048828,
+      "transfer_ms": null,
+      "whole_ms": 205.14419837854803
+    },
+    "competitor_first": {
+      "repeats": 5,
+      "first_decode_ms": 21.166559982299805,
+      "mean_decode_ms": 20.56810802459717,
+      "transfer_ms": 27.257032012939455,
+      "whole_ms": 206.32858080789447
+    },
+    "decode_first": {
+      "repeats": 5,
+      "first_decode_ms": 21.11154441833496,
+      "mean_decode_ms": 20.563623542785646,
+      "transfer_ms": 27.295668029785155,
+      "whole_ms": 205.92328943312168
+    },
+    "serial": {
+      "repeats": 5,
+      "first_decode_ms": 20.50703582763672,
+      "mean_decode_ms": 20.4830456161499,
+      "transfer_ms": 27.22657585144043,
+      "whole_ms": 233.01759716123343
+    }
+  },
+  "model_step_qwen8_p2p_kv4096.jsonl": {
+    "alone": {
+      "repeats": 5,
+      "first_decode_ms": 20.50208396911621,
+      "mean_decode_ms": 20.472449989318847,
+      "transfer_ms": null,
+      "whole_ms": 205.01465620473027
+    },
+    "competitor_first": {
+      "repeats": 5,
+      "first_decode_ms": 21.823408126831055,
+      "mean_decode_ms": 20.643940734863282,
+      "transfer_ms": 29.083267974853516,
+      "whole_ms": 207.2136702015996
+    },
+    "decode_first": {
+      "repeats": 5,
+      "first_decode_ms": 21.78644371032715,
+      "mean_decode_ms": 20.64852268218994,
+      "transfer_ms": 29.073384094238282,
+      "whole_ms": 206.77521638572216
+    },
+    "serial": {
+      "repeats": 5,
+      "first_decode_ms": 20.48739585876465,
+      "mean_decode_ms": 20.473491172790528,
+      "transfer_ms": 29.100496292114258,
+      "whole_ms": 234.37870419584215
+    }
+  },
+  "model_step_qwen8_layer_p2p_kv4096.jsonl": {
+    "alone": {
+      "repeats": 5,
+      "first_decode_ms": 20.51445655822754,
+      "mean_decode_ms": 20.492603149414062,
+      "transfer_ms": null,
+      "whole_ms": 205.2197966258973
+    },
+    "competitor_first": {
+      "repeats": 5,
+      "first_decode_ms": 21.838463973999023,
+      "mean_decode_ms": 20.62797924041748,
+      "transfer_ms": 29.298627853393555,
+      "whole_ms": 214.00756984949112
+    },
+    "decode_first": {
+      "repeats": 5,
+      "first_decode_ms": 21.74185562133789,
+      "mean_decode_ms": 20.666391448974608,
+      "transfer_ms": 29.309459686279297,
+      "whole_ms": 206.96930522099137
+    },
+    "serial": {
+      "repeats": 5,
+      "first_decode_ms": 20.507839965820313,
+      "mean_decode_ms": 20.493474082946776,
+      "transfer_ms": 29.308740234375,
+      "whole_ms": 234.78738581761718
+    }
+  }
+}

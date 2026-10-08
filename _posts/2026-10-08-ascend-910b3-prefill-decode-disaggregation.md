@@ -9,6 +9,9 @@ toc:
   beginning: true
 ---
 
+> **2026-10-08 实验复核补充：**原文两组测试没有重放相同请求 trace，SSE 消息与生成 token 的计数也需区分；11% 是当次观测，尚不足以证明容量提升。详见[后续实验复核](/blog/2026/ascend-910b3-inference-audit-negative-results/)。
+
+
 > 硬件:Atlas 800T A2 训练服务器,单机 8×910B3(单卡 64GB HBM);其中 1 卡留给别人的 CV 任务,实际使用 7 卡。
 > 软件:sglang v0.5.18 + CANN 9.0.0(Ascend 官方 sglang 镜像),PD 传输走 ascend 后端(底层是华为 memfabric_hybrid)。
 > 模型:Qwen3-8B(dense)。负载:输入 ~500 token / 输出 ~200 token,泊松到达。
