@@ -129,6 +129,25 @@ vector 在这个固定工作量里提供了一个 Pareto 点：接近限核方�
 
 首步增加约 3.3%–6.5%，十步平均增加不足 1%。目前这组形状不支持“KV 接收普遍严重伤害 decode”的核心假设；持续并发接收、跨节点 RDMA 和长上下文 batch 尚需另测。
 
+## 新增：真实图表问答的质量与耗时诊断
+
+随后下载真实 Qwen2.5-VL-3B-Instruct 权重和 [ChartQA](https://github.com/vis-nlp/ChartQA) 的 2500 题 test 数据。在 human/augmented 两部分各随机取 32 题，固定种子 20261008，比较四档最大视觉 token。greedy 生成、自然 EOS、最多 32 个新 token；使用 [ChartQA relaxed accuracy](https://github.com/EvolvingLMMs-Lab/lmms-eval/blob/main/lmms_eval/tasks/chartqa/utils.py) 的 5% 数值容差及非数值 exact match。
+
+这是单请求 HF / torch_npu 2.10 / Transformers 5.12.1 的诊断，不是优化 serving 的吞吐结果。首步 wall time 包含 CPU 图像处理、输入搬运和第一次模型 forward，另保留视觉 event span；event span 含主机提交空隙，不等于纯芯片计算时间。模型首次 warmup 单独记录并排除汇总。
+
+| 最大视觉 token | 实际视觉 token 中位数 | 答对题数 | 首步 wall time 中位数（ms） |
+|---|---:|---:|---:|
+| 64 | 54 | 8/64（12.5%） | 239.65 |
+| 256 | 247 | 47/64（73.4%） | 293.74 |
+| 1024 | 580 | 53/64（82.8%） | 389.48 |
+| 4096 | 580 | 53/64（82.8%） | 387.17 |
+
+压低分辨率确实能降低首步成本，但在这组样本上会严重损失答案质量。1024 与 4096 有 61/64 题得到相同 grid 和输出：这里调的是上限，图片到原生尺寸后不会继续放大，不能把这两档解释为实际计算量四倍却没有收益。
+
+质量也不是逐题单调：256→1024 有 9 题由错变对，3 题由对变错。事后从所有预算选正确答案的 oracle 为 56/64，只用于观察选择空间；它读取了答案，**不是可部署方法的成绩**。样本仅 64 题，没有训练或验证任何预算控制器，不能当作全数据集准确率或新方法收益。分辨率控制已有 [ResAdapt](https://arxiv.org/html/2603.28610)、[SmartVL](https://arxiv.org/html/2607.20357) 等邻接工作，下一步先校准优化服务端，再找额外机制。
+
+[逐题输出与时间记录](/assets/data/inference-audit-20261008/chartqa_budget64.jsonl)、[汇总](/assets/data/inference-audit-20261008/chartqa_budget64_summary.json)、[样本编号和数据 SHA256](/assets/data/inference-audit-20261008/chartqa_budget64.manifest.json)、[脚本](/assets/data/inference-audit-20261008/chartqa_budget_probe.py)。记录按原数据集行号关联，不重复分发图片和题目。
+
 ## 接下来怎样筛方向
 
 一般的资源感知混部并不是空白。[xLLM](https://yangtonghome.github.io/uploads/xLLM.pdf) 已讨论 C/V 配额和算子重叠，[FlexNPU](https://arxiv.org/abs/2606.04415) 已有 phase-aware NPU 虚拟化与 PD 混部，[XY-Serve](https://arxiv.org/abs/2412.18106) 已有 NPU mixed attention。[REEF 扩展工作](https://doi.org/10.1145/3768622) 也包含面向共执行的 multi-version kernel 思想。它们需要进入相关工作和对照，不能只因为换了国产硬件就称首次。

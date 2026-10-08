@@ -10,11 +10,16 @@
   "scope": {
     "serving": "86 fixed shape requests, random input IDs; one trace per configuration; not capacity proof",
     "full_model": "fixed-prefix next-token fixture, graph replay; not autoregressive serving",
-    "transfer": "controlled constant data sized by Qwen3-8B configuration; H2D and same-host P2P, not cross-node RDMA"
+    "transfer": "controlled constant data sized by Qwen3-8B configuration; H2D and same-host P2P, not cross-node RDMA",
+    "chartqa": "64 stratified real-image questions, four visual-token caps; HF single-request diagnostic, not tuned serving or a trained controller"
   },
   "numerical_gate": "full-model relative logits RMSE <=0.02 and same greedy token; sampled, not long-generation quality",
   "files": [
     "build_trace.py",
+    "chartqa_budget64.jsonl",
+    "chartqa_budget64.manifest.json",
+    "chartqa_budget64_summary.json",
+    "chartqa_budget_probe.py",
     "fia_mixed_layout_fix.patch",
     "ingress_probe.py",
     "mixed_audit.py",
