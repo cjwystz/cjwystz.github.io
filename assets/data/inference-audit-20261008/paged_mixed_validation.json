@@ -1,0 +1,1 @@
+{"shuffled_pages":true,"qlens":[4,1],"klens":[512,128],"dtype":"bf16","max_abs_error_vs_fp32":0.0017224550247192383,"allclose":true,"physical_card":3,"atol":0.005,"rtol":0.05}

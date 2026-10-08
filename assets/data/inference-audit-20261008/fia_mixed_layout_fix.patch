@@ -1,0 +1,12 @@
+--- /sgl-workspace/sglang/python/sglang/srt/hardware_backend/npu/attention/ascend_backend.py
++++ /sgl-workspace/sglang/python/sglang/srt/hardware_backend/npu/attention/ascend_backend.py
+@@ -2915,6 +2915,8 @@
+             )
+         k_cache = self.token_to_kv_pool.get_key_buffer(layer.layer_id)
+         v_cache = self.token_to_kv_pool.get_value_buffer(layer.layer_id)
+-        num_block, block_size, _, _ = k_cache.shape
++        # FIA pool exposes token-major storage; recover the allocator page view.
++        block_size = self.page_size if self.use_fia else k_cache.shape[1]
++        num_block = k_cache.numel() // (block_size * layer.tp_k_head_num * layer.qk_head_dim)
+         key = k_cache.view(num_block, block_size, -1)
+         value = v_cache.view(num_block, block_size, -1)
