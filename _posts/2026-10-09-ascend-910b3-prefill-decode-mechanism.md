@@ -104,7 +104,7 @@ for _ in range(50):
 | **MTE2(搬入)占用率** | 0.866 | **0.990** | decode 打满 |
 | MTE1 占用率 | 0.790 | 0.439 | |
 
-![Cube 与 MTE 占用对比](/assets/img/blog/mech_pipes.png)
+<img src="/assets/img/blog/mech_pipes.png" alt="Cube 与 MTE 占用对比" style="display:block;margin:1em auto;max-width:68%;height:auto;border-radius:6px;" />
 
 这张图是今天最想要的东西。它说的是:
 
@@ -141,7 +141,7 @@ with torch.npu.stream(s2):
 | 单独跑 | **0.222 ms** | 1.0× |
 | 与 prefill 混部 | **2.264 ms** | **10.2×** |
 
-![干扰延迟对比](/assets/img/blog/mech_interf.png)
+<img src="/assets/img/blog/mech_interf.png" alt="干扰延迟对比" style="display:block;margin:1em auto;max-width:60%;height:auto;border-radius:6px;" />
 
 **10.2 倍**。这就是一体化(collocated)serving 里 TPOT 抖动的物理来源,也是为什么 Sarathi-Serve 要用 chunked-prefill 把大 prefill 切小、插进 decode 空隙——不切的话,decode 的每一步都可能被一个长 prefill 顶住。
 
