@@ -1,0 +1,302 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> 拆到算子看:910B3 上 prefill 和 decode 到底在争什么 | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="上一篇在 910B3 上测了 PD 分离的配比效果——3P:4D 吞吐反超一体化 11%,只给 1 张 prefill 卡会把 TTFT p99 打到 9 秒。但那些都是端到端数字,回答不了" msprof cube prefill decode matmul mte2> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/ascend-910b3-prefill-decode-mechanism/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">拆到算子看:910B3 上 prefill 和 decode 到底在争什么</h1> <p class="post-meta"> 发布于 2026 年 10 月 9 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/prefill-decode-disaggregation"> <i class="fa-solid fa-hashtag fa-sm"></i> prefill-decode-disaggregation</a>   <a href="/blog/tag/ascend-910b3"> <i class="fa-solid fa-hashtag fa-sm"></i> ascend-910b3</a>   <a href="/blog/tag/msprof"> <i class="fa-solid fa-hashtag fa-sm"></i> msprof</a>   <a href="/blog/tag/profiling"> <i class="fa-solid fa-hashtag fa-sm"></i> profiling</a>   <a href="/blog/tag/interference"> <i class="fa-solid fa-hashtag fa-sm"></i> interference</a>   <a href="/blog/tag/performance-model"> <i class="fa-solid fa-hashtag fa-sm"></i> performance-model</a>   <a href="/blog/tag/blog"> <i class="fa-solid fa-hashtag fa-sm"></i> blog</a>   ·   <a href="/blog/category/inference"> <i class="fa-solid fa-tag fa-sm"></i> inference</a>   <a href="/blog/category/llm-serving"> <i class="fa-solid fa-tag fa-sm"></i> llm-serving</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#%E4%B8%80%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E5%BE%80%E4%B8%8B%E6%8B%86%E4%B8%80%E5%B1%82">一、为什么要往下拆一层</a></li> <li class="toc-entry toc-h2"><a href="#%E4%BA%8C%E5%B7%A5%E5%85%B7msprof-%E8%83%BD%E6%8A%8A%E6%89%A7%E8%A1%8C%E5%8D%95%E5%85%83%E6%8B%86%E5%88%B0%E4%BB%80%E4%B9%88%E7%B2%92%E5%BA%A6">二、工具:msprof 能把执行单元拆到什么粒度</a></li> <li class="toc-entry toc-h2"><a href="#%E4%B8%89%E5%AE%9E%E9%AA%8C%E4%B8%80%E5%90%8C%E4%B8%80%E7%AE%97%E5%AD%90%E4%B8%A4%E7%A7%8D%E8%B4%9F%E8%BD%BD%E8%B5%84%E6%BA%90%E5%8D%A0%E7%94%A8%E5%AE%8C%E5%85%A8%E7%9B%B8%E5%8F%8D">三、实验一:同一算子,两种负载,资源占用完全相反</a></li> <li class="toc-entry toc-h2"><a href="#%E5%9B%9B%E5%AE%9E%E9%AA%8C%E4%BA%8C%E4%B8%A4%E8%80%85%E7%9C%9F%E5%9C%A8%E4%B8%80%E5%BC%A0%E5%8D%A1%E4%B8%8A%E8%B7%91decode-%E8%A2%AB%E6%8B%96%E6%85%A2-102-%E5%80%8D">四、实验二:两者真在一张卡上跑,decode 被拖慢 10.2 倍</a></li> <li class="toc-entry toc-h2"><a href="#%E4%BA%94%E6%96%B9%E6%B3%95%E8%AE%BA%E4%B8%8A%E7%9A%84%E4%B8%80%E4%B8%AA%E8%AF%9A%E5%AE%9E%E8%BE%B9%E7%95%8C">五、方法论上的一个诚实边界</a></li> <li class="toc-entry toc-h2"><a href="#%E5%85%AD%E4%B8%8B%E4%B8%80%E6%AD%A5%E4%BB%8E%E7%94%BB%E5%83%8F%E5%88%B0%E5%B9%B2%E6%89%B0%E6%A8%A1%E5%9E%8B">六、下一步:从画像到干扰模型</a></li> <li class="toc-entry toc-h2"><a href="#%E9%99%84%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%9B%9B%E4%B8%AA%E5%AE%9E%E9%AA%8C%E6%B8%85%E5%8D%95">附:今天的四个实验清单</a></li> </ul> </div> <hr> <div id="markdown-content"> <blockquote> <p>承接上一篇《在 910B3 上把 LLM 推理的”前菜”和”主菜”分开炒——PD 分离实测》。 硬件:Atlas 800T A2,单卡 Ascend 910B3(64GB HBM)。软件:CANN 9.0.0 + torch_npu 2.10,profiling 用自带的 msprof。 结论先行:<strong>同一个 MatMul 算子,prefill 负载下 Cube 占用 0.92、decode 负载下只有 0.14;decode 侧数据搬运通道 MTE2 被打到 0.99。</strong> 两者在卡上同时跑,decode 每步延迟从 0.222ms 涨到 2.264ms——<strong>慢 10.2 倍</strong>。PD 分离论文里那句”prefill 干扰 decode”,在 NPU 上可以被拆成具体的执行单元争抢,而不是一个含糊的定性断言。</p> </blockquote> <hr> <h2 id="一为什么要往下拆一层">一、为什么要往下拆一层</h2> <p>上一篇测了四种配比(1P:6D / 2P:5D / 3P:4D / 不分离),端到端指标(TTFT、TPOT、吞吐)都拿到了,结论也清楚:</p> <ul> <li>只给 1 张 prefill 卡,rps=4 时 TTFT p99 冲到 <strong>9018ms</strong>(不分离基线才 111ms);</li> <li>3P:4D 在 rps=8 下吞吐 <strong>1684 tok/s</strong>,比 7 卡不分离高 11%,单卡效率也高 11%。</li> </ul> <p>但这些都是<strong>结果</strong>。它回答不了三个”为什么”:</p> <ol> <li>为什么 prefill 卡数少会让尾延迟爆?是算力排队,还是传输堵了?</li> <li>为什么 decode 不被 prefill 打断就能更省资源?TPOT 全程稳在 15–18ms,这个”稳”的物理来源是什么?</li> <li>为什么最优配比是 3P:4D 而不是别的?能不能不靠扫参数、直接算出来?</li> </ol> <p>这三个问题的共同答案是:<strong>需要一个干扰模型</strong>——知道 prefill 和 decode 各自吃哪种硬件资源、一起吃时怎么抢,才可能解析地推出配比,而不是靠实验枚举。</p> <p>而在做模型之前,得先确认一件事:<strong>这些资源在 910B3 上到底能不能被观测到?</strong> 今天就把这一步做完了。</p> <hr> <h2 id="二工具msprof-能把执行单元拆到什么粒度">二、工具:msprof 能把执行单元拆到什么粒度</h2> <p>昇腾 NPU 的执行结构和 NVIDIA GPU 不一样。GPU 上你主要看一个 SM 占用率,里面算力、搬数、缓存混在一起;910B3 上 AI Core 内部是<strong>分单元</strong>的:</p> <ul> <li> <strong>Cube</strong>:矩阵乘单元(算 GEMM 的地方);</li> <li> <strong>Vector</strong>:向量单元(逐元素运算、softmax 这类);</li> <li> <strong>MTE1/2/3</strong>:三条数据搬运通道(MTE2 = 全局内存→L1/UB,MTE3 = 反向搬出);</li> <li> <strong>Scalar</strong>:控制流。</li> </ul> <p><code class="language-plaintext highlighter-rouge">msprof op</code>(即 msopprof)支持按这几类单元分别采集:</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>msprof op <span class="nt">--application</span><span class="o">=</span><span class="s2">"python3 xxx.py"</span> <span class="se">\</span>
+  <span class="nt">--output</span><span class="o">=</span>./prof <span class="se">\</span>
+  <span class="nt">--aic-metrics</span><span class="o">=</span>ArithmeticUtilization,PipeUtilization,L2Cache,ResourceConflictRatio,Memory <span class="se">\</span>
+  <span class="nt">--launch-count</span><span class="o">=</span>20 <span class="nt">--kill</span><span class="o">=</span>off
+</code></pre></div></div> <p><code class="language-plaintext highlighter-rouge">PipeUtilization</code> 这一组导出的 CSV 里,每一行是一个 AI Core block,列里直接给了:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>aic_cube_time / aic_cube_ratio          Cube 占用率
+aiv_vec_time  / aiv_vec_ratio           Vector 占用率
+aic_mte1_ratio / aic_mte2_ratio / aic_mte3_ratio    三条搬运通道占用率
+aiv_mte2_active_bw / aiv_mte3_active_bw  带宽绝对值 (GB/s)
+aic_scalar_cube_stall_time / ...         stall 按等待对象分解
+</code></pre></div></div> <p>另外 <code class="language-plaintext highlighter-rouge">ResourceConflictRatio</code> 直接给了 bank 冲突、资源冲突、各单元 wait ratio——<strong>这些是干扰的现成量化指标</strong>,不用自己造。</p> <p>这一层粒度是关键:如果只能看到”AI Core 总占用 80%”,你无法区分它是算力满了还是搬数满了;分开之后,”prefill 吃 Cube、decode 吃 MTE2”才有可能是<strong>可验证的命题</strong>而不是假设。</p> <hr> <h2 id="三实验一同一算子两种负载资源占用完全相反">三、实验一:同一算子,两种负载,资源占用完全相反</h2> <p>为了把变量控干净,我没有直接上 sglang,而是用 torch_npu 写了两个受控负载,<strong>都用 MatMul 作为核心算子</strong>,只改 batch 形状:</p> <p><strong>prefill-like</strong>(模拟大 batch 一次性并行算完):</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">X</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">4096</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="sh">"</span><span class="s">npu:1</span><span class="sh">"</span><span class="p">)</span>
+<span class="n">W</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">4096</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="sh">"</span><span class="s">npu:1</span><span class="sh">"</span><span class="p">)</span>
+<span class="n">Q</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="mi">2048</span><span class="p">,</span> <span class="mi">2048</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="sh">"</span><span class="s">npu:1</span><span class="sh">"</span><span class="p">)</span>
+<span class="n">K</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="mi">2048</span><span class="p">,</span> <span class="mi">2048</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="sh">"</span><span class="s">npu:1</span><span class="sh">"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">X</span> <span class="o">@</span> <span class="n">W</span>                       <span class="c1"># 大 GEMM
+</span>    <span class="n">S</span> <span class="o">=</span> <span class="n">Q</span> <span class="o">@</span> <span class="n">K</span><span class="p">.</span><span class="nf">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>     <span class="c1"># attention score
+</span>    <span class="n">P</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">softmax</span><span class="p">(</span><span class="n">S</span><span class="p">.</span><span class="nf">float</span><span class="p">(),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div></div> <p><strong>decode-like</strong>(模拟 batch=1、每步回头读一大片 KV cache):</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">H</span> <span class="o">=</span> <span class="mi">8192</span>
+<span class="n">K_cache</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="mi">16384</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="sh">"</span><span class="s">npu:1</span><span class="sh">"</span><span class="p">)</span>  <span class="c1"># ~256MB
+</span><span class="n">q</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="sh">"</span><span class="s">npu:1</span><span class="sh">"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="mi">50</span><span class="p">):</span>
+    <span class="n">score</span> <span class="o">=</span> <span class="n">q</span> <span class="o">@</span> <span class="n">K_cache</span><span class="p">.</span><span class="nf">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>   <span class="c1"># 读 256MB,几乎无算力
+</span>    <span class="n">score</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">softmax</span><span class="p">(</span><span class="n">score</span><span class="p">.</span><span class="nf">float</span><span class="p">(),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div></div> <p>采集结果——两边都被识别成 MatMul,但走的是不同实现(prefill 命中 <code class="language-plaintext highlighter-rouge">MatMulV3_ND_ND_ND_ND_FP16</code>,decode 命中 <code class="language-plaintext highlighter-rouge">MatMulV2_ND_ND_FP16</code>),各 block 均值如下:</p> <table> <thead> <tr> <th>指标</th> <th>prefill-like</th> <th>decode-like</th> <th>差异</th> </tr> </thead> <tbody> <tr> <td><strong>Cube 占用率</strong></td> <td><strong>0.923</strong></td> <td><strong>0.142</strong></td> <td><strong>6.5×</strong></td> </tr> <tr> <td><strong>MTE2(搬入)占用率</strong></td> <td>0.866</td> <td><strong>0.990</strong></td> <td>decode 打满</td> </tr> <tr> <td>MTE1 占用率</td> <td>0.790</td> <td>0.439</td> <td> </td> </tr> </tbody> </table> <p><img src="/assets/img/blog/mech_pipes.png" alt="Cube 与 MTE 占用对比"></p> <p>这张图是今天最想要的东西。它说的是:</p> <ul> <li> <strong>prefill 是 Cube-bound</strong>:算力单元几乎打满(0.92),搬数通道也忙(0.87)但没到极限——瓶颈在算;</li> <li> <strong>decode 是 MTE2-bound</strong>:Cube 只有 0.14(算力大量闲置!),但搬数通道打到 0.99——瓶颈完全在搬 KV;</li> <li>两者<strong>占用的是不同的资源池</strong>。这正是 PD 分离能work的物理前提:如果把两种负载放同一张卡,一个吃 Cube、一个吃 MTE2,理论上”应该”能互补……但下面实验二会告诉你,现实没这么美好。</li> </ul> <p>顺便一个细节:decode 侧 Cube 闲到 86%。<strong>这说明在 decode 阶段,910B3 的算力是被浪费的</strong>——这也是 AFD(attention-FFN 分离)和 decode 侧混部优化想吃的红利。</p> <hr> <h2 id="四实验二两者真在一张卡上跑decode-被拖慢-102-倍">四、实验二:两者真在一张卡上跑,decode 被拖慢 10.2 倍</h2> <p>上面是”各自单独跑”的画像。真实 serving 里它们是同时在的,所以要测争抢。用 torch_npu 的双 stream 构造混部:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">s1</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="n">npu</span><span class="p">.</span><span class="nc">Stream</span><span class="p">()</span>
+<span class="n">s2</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="n">npu</span><span class="p">.</span><span class="nc">Stream</span><span class="p">()</span>
+
+<span class="c1"># decode 基线:单独跑 200 步
+</span><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span> <span class="nf">decode_step</span><span class="p">()</span>
+
+<span class="c1"># 混部:prefill 在 stream1 持续压,decode 在 stream2 计时
+</span><span class="k">with</span> <span class="n">torch</span><span class="p">.</span><span class="n">npu</span><span class="p">.</span><span class="nf">stream</span><span class="p">(</span><span class="n">s1</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">N</span> <span class="o">*</span> <span class="mi">3</span><span class="p">):</span> <span class="nf">prefill_step</span><span class="p">()</span>
+<span class="k">with</span> <span class="n">torch</span><span class="p">.</span><span class="n">npu</span><span class="p">.</span><span class="nf">stream</span><span class="p">(</span><span class="n">s2</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span> <span class="nf">decode_step</span><span class="p">()</span>
+</code></pre></div></div> <p>结果:</p> <table> <thead> <tr> <th>场景</th> <th>decode 每步延迟</th> <th>倍数</th> </tr> </thead> <tbody> <tr> <td>单独跑</td> <td><strong>0.222 ms</strong></td> <td>1.0×</td> </tr> <tr> <td>与 prefill 混部</td> <td><strong>2.264 ms</strong></td> <td><strong>10.2×</strong></td> </tr> </tbody> </table> <p><img src="/assets/img/blog/mech_interf.png" alt="干扰延迟对比"></p> <p><strong>10.2 倍</strong>。这就是一体化(collocated)serving 里 TPOT 抖动的物理来源,也是为什么 Sarathi-Serve 要用 chunked-prefill 把大 prefill 切小、插进 decode 空隙——不切的话,decode 的每一步都可能被一个长 prefill 顶住。</p> <p>对照实验一的画像看,这个 10.2× 并不意外,但<strong>原因不是算力</strong>:prefill 吃 Cube、decode 吃 MTE2,资源池本来错开。真正的争抢点在<strong>共享的下游</strong>——两者都要读写全局内存(HBM)和 L2,而 decode 恰恰是 MTE2-bound 的,它的搬数通道一旦被 prefill 的流量挤占,就直接体现为每步延迟暴涨。</p> <p>这也解释了上一篇里那个现象:<strong>1P:6D 配置下 TPOT 依然稳在 16.3ms,爆的是 TTFT p99</strong>。因为 decode 卡独占,没人跟它抢 MTE2 和 HBM;而 prefill 只有一张卡,请求在那里排队,所以首 token 延迟炸。分离之后各自资源独占,干扰被物理消除——<strong>这正是 PD 分离的价值所在,不是调度技巧,而是资源隔离。</strong></p> <hr> <h2 id="五方法论上的一个诚实边界">五、方法论上的一个诚实边界</h2> <p>必须说清楚一个限制:<strong><code class="language-plaintext highlighter-rouge">msprof op</code> 是 kernel-replay 模式</strong>——它把每个 kernel 单独重放来采计数器。所以我拿到的 pipe 占用画像是”这个 kernel 孤立执行时”的资源消耗,<strong>不包含运行时的真实争抢信息</strong>。</p> <p>证据是:我对混部脚本(<code class="language-plaintext highlighter-rouge">mixed.py</code>)同样跑了 msprof op,decode 侧 MatMul 的画像依然是 cube 0.146 / mte2 0.990——和它单独跑时几乎一样。争抢没有体现在 kernel 画像里,<strong>争抢体现在 wall-clock 延迟里(那个 10.2×)</strong>。</p> <p>这意味着正确的组合方式是:</p> <ul> <li> <strong>单 kernel 画像</strong>告诉你”每个算子吃哪种资源”→ 用来建机理模型;</li> <li> <strong>wall-clock / 服务级采样</strong>告诉你”一起吃时慢了多少”→ 用来标定和验证模型。</li> </ul> <p>服务级采样这条路(<code class="language-plaintext highlighter-rouge">msprof --aic-mode=sample-based</code> + <code class="language-plaintext highlighter-rouge">--sys-hardware-mem</code>,可对着运行中的 sglang 服务采 HBM/LLC/DDR)命令格式我已经验证可用,但还没在真实 PD 服务上跑过——这是下一步。</p> <p>另外一个已知缺口:<code class="language-plaintext highlighter-rouge">--aic-metrics=Memory</code> 导出的 HBM 带宽绝对值(<code class="language-plaintext highlighter-rouge">aic_main_mem_read_bw</code> 等)在 MatMul 上返回 NA,需要配合 <code class="language-plaintext highlighter-rouge">ArithmeticUtilization</code> 或换 metric 组才能填满。带宽绝对值对量化”争抢了多少 GB/s”很关键,是建模前要先解决的一个小问题。</p> <hr> <h2 id="六下一步从画像到干扰模型">六、下一步:从画像到干扰模型</h2> <p>今天做完的是可行性验证——<strong>三项机理(算力/搬运/缓存)在 910B3 上都可观测</strong>,而且比 GPU 细一个量级(Cube 与 Vector 分离,三条 MTE 通道分开)。有了这个基础,干扰模型才可能做得出机理而不只是拟合曲线。</p> <p>计划中的路径:</p> <ol> <li> <strong>受控二维扫描</strong>:在真实 serving 里扫 (prefill batch × decode batch) 网格,同时记录 pipe 占用与 wall-clock,得到干扰曲面 I(b_p, b_d);</li> <li> <strong>机理归因</strong>:把干扰分解为 共享 HBM 带宽争抢 + L2 污染 + 调度队列阻塞 三项,每项用 msprof 的指标标定;</li> <li> <strong>held-out 验证</strong>:模型在没扫过的配置(换模型规模、换序列长度)上预测,验证是否可外推——这是”模型”与”拟合”的分界线;</li> <li> <strong>导出决策</strong>:有了状态依赖的服务率,就能解析推导 colocated vs PD 的相变边界,以及最优配比,替代上一篇那种实验枚举。</li> </ol> <p>第 4 步才是研究价值的落点:现在所有人都靠扫参数选配比(包括上一篇的我自己),如果能从干扰模型<strong>解析地</strong>算出配比,那就不只是”在国产卡上复现了一个结论”,而是给出了一个别人在 GPU 上也用得上的方法。</p> <p>而 910B3 的 Cube/Vector/MTE 分离观测,恰好让机理归因这一步比在 GPU 上做更有可能——GPU 上你只有一个 SM 占用率,分不清争抢发生在算力还是搬数。</p> <hr> <h2 id="附今天的四个实验清单">附:今天的四个实验清单</h2> <table> <thead> <tr> <th>#</th> <th>实验</th> <th>方法</th> <th>结果</th> </tr> </thead> <tbody> <tr> <td>1</td> <td>工具链摸底</td> <td> <code class="language-plaintext highlighter-rouge">msprof --help</code> / <code class="language-plaintext highlighter-rouge">msprof op --help</code> </td> <td>Cube/Vector/MTE/L2/冲突率/HBM 均可采</td> </tr> <tr> <td>2</td> <td>最小 kernel 验证</td> <td>4096² matmul + softmax,<code class="language-plaintext highlighter-rouge">--launch-count=8</code> </td> <td>CSV 真实导出,数值可读</td> </tr> <tr> <td>3</td> <td>单负载资源画像</td> <td>prefill-like vs decode-like</td> <td>Cube 0.92 vs 0.14,MTE2 0.87 vs 0.99</td> </tr> <tr> <td>4</td> <td>干扰实测</td> <td>torch_npu 双 stream 混部</td> <td>decode 0.222ms → 2.264ms,<strong>10.2×</strong> </td> </tr> </tbody> </table> <p>全部实验在单卡 910B3 上完成(卡 1,卡 0 留给别人的任务),脚本与原始 profiling 数据在 node200 <code class="language-plaintext highlighter-rouge">~/chenjiawei/pd-exp/</code>(<code class="language-plaintext highlighter-rouge">mini_kernel.py</code> / <code class="language-plaintext highlighter-rouge">prefill_like.py</code> / <code class="language-plaintext highlighter-rouge">decode_like.py</code> / <code class="language-plaintext highlighter-rouge">mixed.py</code>,profile 结果在 <code class="language-plaintext highlighter-rouge">prof_test/</code> <code class="language-plaintext highlighter-rouge">prof_prefill/</code> <code class="language-plaintext highlighter-rouge">prof_decode/</code> <code class="language-plaintext highlighter-rouge">prof_mixed/</code>)。</p> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-disaggregation/">在 910B3 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/real-envelope-aigc-detection/">守真，而非逐假——AI 生成图像检测为什么总是慢半拍</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-first-agent-calibration/">跑满 4 小时、零交卷、reward 0.0——但这不是躺平</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-hard-task-no-oracle/">100 秒被秒杀之后：我们把 benchmark 升级成了"没人会做的题"</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/frontierswe-inference-task-anatomy/">解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/harbor-infra-benchmark-first-task/">把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-npu-moe-fp32-pr/">追一个静默精度 bug：我给 SGLang 提 PR 的完整记录</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-ascend-910b-deploy/">昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/welcome/">欢迎来到我的大模型系统笔记</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2025/rag-optimized-t2i/">RAG 优化文生图——不动模型，修复提示词错位</a> </li> </ul> </div> </div> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "publications by categories in reversed chronological order. generated by jekyll-scholar.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Edit the `_data/repositories.yml` and change the `github_users` and `github_repos` lists to include your own GitHub profile and repositories.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "This is a description of the page. You can modify it in &#39;_pages/cv.md&#39;. You can also change or remove the top pdf download button.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-拆到算子看-910b3-上-prefill-和-decode-到底在争什么",
+        
+          title: "拆到算子看:910B3 上 prefill 和 decode 到底在争什么",
+        
+        description: "上一篇在 910B3 上测了 PD 分离的配比效果——3P:4D 吞吐反超一体化 11%,只给 1 张 prefill 卡会把 TTFT p99 打到 9 秒。但那些都是端到端数字,回答不了&quot;为什么&quot;。这篇往下拆一层:用昇腾 msprof 把 Cube/Vector/MTE 三类执行单元分开观测,给出 prefill 与 decode 资源争抢的硬件级证据——同一个 MatMul 算子,prefill 负载下 Cube 占用 0.92,decode 负载下只有 0.14,而搬数通道 MTE2 被打满到 0.99。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-mechanism/";
+          
+        },
+      },{id: "post-在-910b3-上把-llm-推理的-quot-前菜-quot-和-quot-主菜-quot-分开炒-pd-分离实测",
+        
+          title: "在 910B3 上把 LLM 推理的&quot;前菜&quot;和&quot;主菜&quot;分开炒——PD 分离实测",
+        
+        description: "在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B3 上做了真机 PD 的配比实验:7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-disaggregation/";
+          
+        },
+      },{id: "post-守真-而非逐假-ai-生成图像检测为什么总是慢半拍",
+        
+          title: "守真，而非逐假——AI 生成图像检测为什么总是慢半拍",
+        
+        description: "AI 生成图像检测的系统性困境：检测器永远追不上生成器的迭代。这篇博客聊聊这个领域走过的几条路（GAN 指纹、DIRE、UnivFD、latent blending），以及一个换方向的思路——与其学假图长什么样，不如给真实照片的分布修一圈围墙。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/real-envelope-aigc-detection/";
+          
+        },
+      },{id: "post-跑满-4-小时-零交卷-reward-0-0-但这不是躺平",
+        
+          title: "跑满 4 小时、零交卷、reward 0.0——但这不是躺平",
+        
+        description: "开放式性能题的第一次真实 agent 校准：DeepSeek-V4.1-Flash 驱动的 claude-code 在 4B FlagScale/沐曦题上 4 小时跑满、零交卷、reward 0.0——但 3079 条轨迹里是教科书级的双峰诊断、一次通信串行化的实锤，和 +47% 的真实吞吐提升。复盘两个坑（一个算我们的，一个算它的）、阈值决策，以及为什么 binary reward 会抹掉这次实验里最有价值的信息。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-first-agent-calibration/";
+          
+        },
+      },{id: "post-100-秒被秒杀之后-我们把-benchmark-升级成了-quot-没人会做的题-quot",
+        
+          title: "100 秒被秒杀之后：我们把 benchmark 升级成了&quot;没人会做的题&quot;",
+        
+        description: "国产 infra agentic benchmark 的第一次真机校准翻车实录——精心设计的 hard 题被当代模型 100 秒连过五次，复盘出&quot;好题的三条反例&quot;，然后转身做了一道连出题团队自己都没解出来的开放式性能题：32 卡国产 GPU 上把 27B 训练吞吐推过实测纪录。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-hard-task-no-oracle/";
+          
+        },
+      },{id: "post-解剖一道顶级-agentic-考题-frontierswe-推理优化题的设计艺术",
+        
+          title: "解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术",
+        
+        description: "逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/frontierswe-inference-task-anatomy/";
+          
+        },
+      },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-mlsys-2027-submission-in-progress-heterogeneous-modeling-packing-scheduling-for-general-llm-training-qingcheng-jizhi-ustb-co-first-author-to-be-submitted-in-oct-2026",
+          title: 'MLSys 2027 submission in progress: heterogeneous-modeling Packing scheduling for general LLM training (Qingcheng...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "Training-framework contributions for the MetaX ecosystem (4k+ stars)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
