@@ -1,0 +1,108 @@
+{
+  "source": "tp2_serving_ingress.json",
+  "all_completion_and_smoke_gates_passed": true,
+  "completed_cases": 10,
+  "eligible_pairs": 5,
+  "pairs": [
+    {
+      "repeat": 0,
+      "eligible": true,
+      "idle": {
+        "mean_itl_ms": 11.635537867212927,
+        "p99_itl_ms": 13.2634739857167
+      },
+      "flow": {
+        "mean_itl_ms": 12.091182070824809,
+        "p99_itl_ms": 13.536795973777771
+      },
+      "transfer_completion_span_coverage": 0.9987740160325213,
+      "transfers": 992,
+      "mean_itl_slowdown_percent": 3.9159702698043253
+    },
+    {
+      "repeat": 1,
+      "eligible": true,
+      "idle": {
+        "mean_itl_ms": 11.86221137998343,
+        "p99_itl_ms": 13.815236976370215
+      },
+      "flow": {
+        "mean_itl_ms": 12.024750268990049,
+        "p99_itl_ms": 13.400905067101121
+      },
+      "transfer_completion_span_coverage": 0.9987534236012674,
+      "transfers": 992,
+      "mean_itl_slowdown_percent": 1.3702241833330575
+    },
+    {
+      "repeat": 2,
+      "eligible": true,
+      "idle": {
+        "mean_itl_ms": 11.522064595348118,
+        "p99_itl_ms": 13.140283990651369
+      },
+      "flow": {
+        "mean_itl_ms": 12.100289841977688,
+        "p99_itl_ms": 13.75653618015349
+      },
+      "transfer_completion_span_coverage": 0.9986754865090052,
+      "transfers": 1248,
+      "mean_itl_slowdown_percent": 5.018416984600327
+    },
+    {
+      "repeat": 3,
+      "eligible": true,
+      "idle": {
+        "mean_itl_ms": 11.729153867755874,
+        "p99_itl_ms": 13.793786987662315
+      },
+      "flow": {
+        "mean_itl_ms": 12.034589794114124,
+        "p99_itl_ms": 13.755507068708539
+      },
+      "transfer_completion_span_coverage": 0.9987754810451457,
+      "transfers": 992,
+      "mean_itl_slowdown_percent": 2.6040746826411
+    },
+    {
+      "repeat": 4,
+      "eligible": true,
+      "idle": {
+        "mean_itl_ms": 12.030505857183016,
+        "p99_itl_ms": 13.756505912169814
+      },
+      "flow": {
+        "mean_itl_ms": 12.131319767831883,
+        "p99_itl_ms": 14.090546872466803
+      },
+      "transfer_completion_span_coverage": 0.9986558323881564,
+      "transfers": 992,
+      "mean_itl_slowdown_percent": 0.8379856329040036
+    }
+  ],
+  "idle_mean_itl_ms": 11.755894713496673,
+  "flow_mean_itl_ms": 12.076426348747711,
+  "paired_slowdown_percent_mean": 2.7493343506565626,
+  "paired_slowdown_percent_range": [
+    0.8379856329040036,
+    5.018416984600327
+  ],
+  "limits": [
+    "Single autoregressive request, TP2 Qwen3-8B, 512 input / 2048 output.",
+    "Synthetic repeated ingress into one TP rank; no real PD, fan-in, goodput or scheduler comparison.",
+    "Both modes retain the same external transport process, HCCL context and 18-GiB buffers.",
+    "16-token greedy ID smoke; full text equality is not full token-ID or numerical proof.",
+    "Client ITL includes software/HTTP scheduling. No operator-level causal attribution.",
+    "Coverage is transfer host-completion spans, not proof of uninterrupted DMA.",
+    "Five-repeat range is not a confidence interval; a single prompt shape does not establish generality.",
+    "Global random order placed flow early and idle late; idle timing drift is comparable to the paired difference. This is not isolated DMA causality.",
+    "Node-local TP2 on node203; cross-node TP collectives sharing the ingress fabric have not been tested."
+  ],
+  "chronological_idle_mean_itl_ms": [
+    12.030505857183016,
+    11.86221137998343,
+    11.729153867755874,
+    11.635537867212927,
+    11.522064595348118
+  ]
+}

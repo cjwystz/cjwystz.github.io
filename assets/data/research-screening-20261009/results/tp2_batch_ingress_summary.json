@@ -1,0 +1,329 @@
+{
+  "source": "tp2_batch_ingress.json",
+  "completed_cases": 10,
+  "completed_timed_requests": 80,
+  "eligible_pairs": 5,
+  "all_completion_and_smoke_gates_passed": true,
+  "pairs": [
+    {
+      "repeat": 0,
+      "idle": {
+        "eligible": true,
+        "mode": "idle",
+        "repeat": 0,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.681082725524902,
+        "transfer_completion_span_coverage": null,
+        "mean_itl_ms": 13.051188137736938,
+        "pooled_p99_itl_ms": 14.175867894664407
+      },
+      "flow": {
+        "eligible": true,
+        "mode": "flow",
+        "repeat": 0,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.995608568191528,
+        "transfer_completion_span_coverage": 0.9990237787444487,
+        "mean_itl_ms": 13.660134506562466,
+        "pooled_p99_itl_ms": 15.029211062937975
+      },
+      "eligible": true,
+      "mean_itl_slowdown_percent": 4.665830899064161
+    },
+    {
+      "repeat": 1,
+      "idle": {
+        "eligible": true,
+        "mode": "idle",
+        "repeat": 1,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.7046051025390625,
+        "transfer_completion_span_coverage": null,
+        "mean_itl_ms": 13.09784291207215,
+        "pooled_p99_itl_ms": 15.104800928384066
+      },
+      "flow": {
+        "eligible": true,
+        "mode": "flow",
+        "repeat": 1,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.971933126449585,
+        "transfer_completion_span_coverage": 0.9990974751155061,
+        "mean_itl_ms": 13.619006094807279,
+        "pooled_p99_itl_ms": 15.124720986932516
+      },
+      "eligible": true,
+      "mean_itl_slowdown_percent": 3.979000101266905
+    },
+    {
+      "repeat": 2,
+      "idle": {
+        "eligible": true,
+        "mode": "idle",
+        "repeat": 2,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.67778754234314,
+        "transfer_completion_span_coverage": null,
+        "mean_itl_ms": 13.044379912868857,
+        "pooled_p99_itl_ms": 14.556648908182979
+      },
+      "flow": {
+        "eligible": true,
+        "mode": "flow",
+        "repeat": 2,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.965972661972046,
+        "transfer_completion_span_coverage": 0.9991367474875509,
+        "mean_itl_ms": 13.607915756399828,
+        "pooled_p99_itl_ms": 15.298451064154506
+      },
+      "eligible": true,
+      "mean_itl_slowdown_percent": 4.32014283005524
+    },
+    {
+      "repeat": 3,
+      "idle": {
+        "eligible": true,
+        "mode": "idle",
+        "repeat": 3,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.694364786148071,
+        "transfer_completion_span_coverage": null,
+        "mean_itl_ms": 13.077685939381796,
+        "pooled_p99_itl_ms": 15.144380973652005
+      },
+      "flow": {
+        "eligible": true,
+        "mode": "flow",
+        "repeat": 3,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 7.014116525650024,
+        "transfer_completion_span_coverage": 0.999104228623507,
+        "mean_itl_ms": 13.701340237953666,
+        "pooled_p99_itl_ms": 15.226500807330012
+      },
+      "eligible": true,
+      "mean_itl_slowdown_percent": 4.768842908926363
+    },
+    {
+      "repeat": 4,
+      "idle": {
+        "eligible": true,
+        "mode": "idle",
+        "repeat": 4,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.679656744003296,
+        "transfer_completion_span_coverage": null,
+        "mean_itl_ms": 13.049559083110697,
+        "pooled_p99_itl_ms": 14.102466870099306
+      },
+      "flow": {
+        "eligible": true,
+        "mode": "flow",
+        "repeat": 4,
+        "gap_counts": [
+          511,
+          510,
+          510,
+          510,
+          510,
+          510,
+          510,
+          511
+        ],
+        "common_window_s": 6.9619834423065186,
+        "transfer_completion_span_coverage": 0.9992017992734757,
+        "mean_itl_ms": 13.601238577086372,
+        "pooled_p99_itl_ms": 14.763040002435446
+      },
+      "eligible": true,
+      "mean_itl_slowdown_percent": 4.227571908461503
+    }
+  ],
+  "idle_mean_itl_ms": 13.064131197034088,
+  "flow_mean_itl_ms": 13.637927034561923,
+  "paired_slowdown_percent_mean": 4.392277729554834,
+  "paired_slowdown_percent_range": [
+    3.979000101266905,
+    4.768842908926363
+  ],
+  "limits": [
+    "Eight concurrent autoregressive requests, Qwen3-8B TP2, 1024 input / 768 output.",
+    "Same resident 18-GiB buffers and independent HCCL context, synthetic ingress into TP rank0.",
+    "Mean client ITL in common token128..640 window; 256+ gaps/request; all unit-delta streams.",
+    "Client lifetime overlap alone does not prove the internal graph ran batch8 at every instant.",
+    "16-token exact greedy smoke and full output text equality, not complete numerical/token-ID proof.",
+    "Adjacent pairs with randomized within-pair order; remaining drift/system noise not eliminated.",
+    "Five-repeat range is not a confidence interval; no real PD, fan-in, large-context or goodput conclusion.",
+    "TP2 is node-local on node203; this does not test cross-node TP collectives sharing external bottleneck links."
+  ],
+  "server_window_audit": {
+    "source": "tp2_ingress_server_runtime.log",
+    "timestamp_resolution_s": 1,
+    "selection": "Logged whole-second intervals fully inside predeclared client common window",
+    "cases": [
+      {
+        "case_id": 0,
+        "decode_samples": 11,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 1,
+        "decode_samples": 11,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 2,
+        "decode_samples": 11,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 3,
+        "decode_samples": 11,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 4,
+        "decode_samples": 11,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 5,
+        "decode_samples": 11,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 6,
+        "decode_samples": 9,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 7,
+        "decode_samples": 11,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 8,
+        "decode_samples": 11,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      },
+      {
+        "case_id": 9,
+        "decode_samples": 12,
+        "running_requests_all_8": true,
+        "graph_all_true": true,
+        "queue_all_zero": true,
+        "prefill_samples": 0
+      }
+    ],
+    "limits": "Sampled scheduler lines, not operator-level proof of every iteration."
+  }
+}

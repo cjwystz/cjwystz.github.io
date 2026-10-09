@@ -1,0 +1,204 @@
+{
+  "observed_at": "2026-10-08T15:00:06.623588+00:00",
+  "model": "Qwen3-0.6B",
+  "source_weight_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+  "software": {
+    "sglang": "0.5.18",
+    "memfabric_hybrid": "1.0.8",
+    "transfer_backend": "ascend",
+    "transfer_protocol": "device_rdma"
+  },
+  "placement": {
+    "prefill": "node202 physical card 3",
+    "decode": "node203 physical card 3",
+    "router": "http://10.0.2.202:32434"
+  },
+  "smoke_greedy_match_lengths": [
+    32,
+    512,
+    4096
+  ],
+  "all_request_lengths_passed": true,
+  "runs": [
+    {
+      "repeat": 1,
+      "summary": {
+        "config": {
+          "url": "http://127.0.0.1:32434",
+          "trace": "/workspace/cjw-research/results/serving_trace_seed42_rps4.json",
+          "output": "/workspace/cjw-research/results/pd_serving_seed42_rps4_repeat1.json",
+          "ttft_slo": 1.0,
+          "tpot_slo": 0.05
+        },
+        "trace_config": {
+          "rate": 4.0,
+          "duration": 20.0,
+          "arrival_seed": 42,
+          "prompt_seed": 123,
+          "inputs": [
+            512,
+            4096
+          ],
+          "outputs": [
+            128
+          ]
+        },
+        "requests": 86,
+        "completed_exact_length": 86,
+        "failed_or_short": 0,
+        "arrival_window_s": 20.0,
+        "completion_window_s": 35.000110022723675,
+        "slo_satisfied": 0,
+        "slo_goodput_arrival_window_rps": 0.0,
+        "slo_goodput_including_drain_rps": 0.0,
+        "output_tok_s_including_drain": 314.5132970397265,
+        "ttft_p50_s": 16.24541524797678,
+        "ttft_p99_s": 19.36685522645712,
+        "tpot_p50_s": 0.010849394270871568,
+        "tpot_p99_s": 0.011407503242215773,
+        "itl_p99_s": 0.04393596760928631,
+        "coalesced_requests": 7,
+        "max_dispatch_lag_s": 0.002748815342783928
+      }
+    },
+    {
+      "repeat": 2,
+      "summary": {
+        "config": {
+          "url": "http://127.0.0.1:32434",
+          "trace": "/workspace/cjw-research/results/serving_trace_seed42_rps4.json",
+          "output": "/workspace/cjw-research/results/pd_serving_seed42_rps4_repeat2.json",
+          "ttft_slo": 1.0,
+          "tpot_slo": 0.05
+        },
+        "trace_config": {
+          "rate": 4.0,
+          "duration": 20.0,
+          "arrival_seed": 42,
+          "prompt_seed": 123,
+          "inputs": [
+            512,
+            4096
+          ],
+          "outputs": [
+            128
+          ]
+        },
+        "requests": 86,
+        "completed_exact_length": 86,
+        "failed_or_short": 0,
+        "arrival_window_s": 20.0,
+        "completion_window_s": 22.480653000995517,
+        "slo_satisfied": 61,
+        "slo_goodput_arrival_window_rps": 3.05,
+        "slo_goodput_including_drain_rps": 2.7134443113062026,
+        "output_tok_s_including_drain": 489.66549145669967,
+        "ttft_p50_s": 0.26654005981981754,
+        "ttft_p99_s": 2.9424664471298456,
+        "tpot_p50_s": 0.010972841650130242,
+        "tpot_p99_s": 0.011611996497225574,
+        "itl_p99_s": 0.04195636883378029,
+        "coalesced_requests": 0,
+        "max_dispatch_lag_s": 0.004067523404955864
+      }
+    },
+    {
+      "repeat": 3,
+      "summary": {
+        "config": {
+          "url": "http://127.0.0.1:32434",
+          "trace": "/workspace/cjw-research/results/serving_trace_seed42_rps4.json",
+          "output": "/workspace/cjw-research/results/pd_serving_seed42_rps4_repeat3.json",
+          "ttft_slo": 1.0,
+          "tpot_slo": 0.05
+        },
+        "trace_config": {
+          "rate": 4.0,
+          "duration": 20.0,
+          "arrival_seed": 42,
+          "prompt_seed": 123,
+          "inputs": [
+            512,
+            4096
+          ],
+          "outputs": [
+            128
+          ]
+        },
+        "requests": 86,
+        "completed_exact_length": 86,
+        "failed_or_short": 0,
+        "arrival_window_s": 20.0,
+        "completion_window_s": 20.73272575996816,
+        "slo_satisfied": 83,
+        "slo_goodput_arrival_window_rps": 4.15,
+        "slo_goodput_including_drain_rps": 4.0033327484734675,
+        "output_tok_s_including_drain": 530.9480348818787,
+        "ttft_p50_s": 0.1739843524992466,
+        "ttft_p99_s": 1.043594803661108,
+        "tpot_p50_s": 0.011113017254809695,
+        "tpot_p99_s": 0.011868983375157897,
+        "itl_p99_s": 0.04385589808225632,
+        "coalesced_requests": 0,
+        "max_dispatch_lag_s": 0.003638545051217079
+      }
+    },
+    {
+      "repeat": 4,
+      "summary": {
+        "config": {
+          "url": "http://127.0.0.1:32434",
+          "trace": "/workspace/cjw-research/results/serving_trace_seed42_rps4.json",
+          "output": "/workspace/cjw-research/results/pd_serving_seed42_rps4_repeat4.json",
+          "ttft_slo": 1.0,
+          "tpot_slo": 0.05
+        },
+        "trace_config": {
+          "rate": 4.0,
+          "duration": 20.0,
+          "arrival_seed": 42,
+          "prompt_seed": 123,
+          "inputs": [
+            512,
+            4096
+          ],
+          "outputs": [
+            128
+          ]
+        },
+        "requests": 86,
+        "completed_exact_length": 86,
+        "failed_or_short": 0,
+        "arrival_window_s": 20.0,
+        "completion_window_s": 20.63366923853755,
+        "slo_satisfied": 84,
+        "slo_goodput_arrival_window_rps": 4.2,
+        "slo_goodput_including_drain_rps": 4.071016115888541,
+        "output_tok_s_including_drain": 533.4969690916793,
+        "ttft_p50_s": 0.17367073334753513,
+        "ttft_p99_s": 1.0147503148764372,
+        "tpot_p50_s": 0.010844148299473477,
+        "tpot_p99_s": 0.011841738053898173,
+        "itl_p99_s": 0.040255531668663025,
+        "coalesced_requests": 0,
+        "max_dispatch_lag_s": 0.0032934118062257767
+      }
+    }
+  ],
+  "limits": [
+    "Synthetic token IDs; no representative language accuracy claim.",
+    "Progressively warmed repetitions are not interchangeable steady-state samples.",
+    "The large first-run TTFT is unresolved; repeated-run improvement does not identify its cause.",
+    "First-run ITL percentile excludes 7 coalesced streams; later runs have no coalesced streams.",
+    "PD consumes two cards; no improvement claim against the historical one-card standalone result.",
+    "This is a baseline, not a new scheduler or conference-ready contribution."
+  ],
+  "own_timeout_parent_pids": {
+    "node202_store": 4091578,
+    "node202_prefill": 4109577,
+    "node202_router": 4109819,
+    "node203_decode": 4087261
+  },
+  "process_limit_seconds": 3600,
+  "resume_note": "Check actual PID commands and endpoint health again before reuse; timeout wrappers may expire. Preserve node203 existing cards 1/2 services and node200 existing services."
+}

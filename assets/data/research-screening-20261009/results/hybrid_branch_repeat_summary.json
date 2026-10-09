@@ -1,0 +1,57 @@
+{
+  "source": "hybrid_branch_repeat_probe.json",
+  "completed_queries": 24,
+  "completed_traces": 3,
+  "all_output_id_gates_passed": false,
+  "rows": [
+    {
+      "repeat": 0,
+      "cached_tokens": [
+        0,
+        512,
+        512,
+        768
+      ],
+      "full_32_ids_equal": [
+        true,
+        true,
+        false,
+        true
+      ],
+      "first_divergence_index": 1
+    },
+    {
+      "repeat": 1,
+      "cached_tokens": [
+        0,
+        512,
+        512,
+        768
+      ],
+      "full_32_ids_equal": [
+        true,
+        true,
+        false,
+        true
+      ],
+      "first_divergence_index": 1
+    },
+    {
+      "repeat": 2,
+      "cached_tokens": [
+        0,
+        512,
+        512,
+        768
+      ],
+      "full_32_ids_equal": [
+        true,
+        true,
+        false,
+        true
+      ],
+      "first_divergence_index": 1
+    }
+  ],
+  "limits": "Synthetic random-token trace; greedy divergence is a failed exact-ID gate, not proven semantic-quality loss, cache corruption or novel mechanism. GDN segmentation/numerics and checkpoint components need audit."
+}

@@ -1,0 +1,56 @@
+{
+  "chrome_256": {
+    "n": 6,
+    "unique_tasks": 1,
+    "main_transitions": 6,
+    "no_pixel_change": 0,
+    "reuse_fraction_median": 0.19047619047619047,
+    "reuse_fraction_mean": 0.1931216931216931,
+    "changing_only_reuse_median": 0.19047619047619047
+  },
+  "chrome_1024": {
+    "n": 6,
+    "unique_tasks": 1,
+    "main_transitions": 6,
+    "no_pixel_change": 0,
+    "reuse_fraction_median": 0.4365079365079365,
+    "reuse_fraction_mean": 0.36904761904761907,
+    "changing_only_reuse_median": 0.4365079365079365
+  },
+  "chrome_4096": {
+    "n": 6,
+    "unique_tasks": 1,
+    "main_transitions": 6,
+    "no_pixel_change": 0,
+    "reuse_fraction_median": 0.5659606094388703,
+    "reuse_fraction_mean": 0.5075560510343119,
+    "changing_only_reuse_median": 0.5659606094388703
+  },
+  "libreoffice_calc_256": {
+    "n": 64,
+    "unique_tasks": 1,
+    "main_transitions": 0,
+    "no_pixel_change": 0,
+    "reuse_fraction_median": 0.5079365079365079,
+    "reuse_fraction_mean": 0.46378968253968256,
+    "changing_only_reuse_median": 0.5079365079365079
+  },
+  "libreoffice_calc_1024": {
+    "n": 64,
+    "unique_tasks": 1,
+    "main_transitions": 0,
+    "no_pixel_change": 0,
+    "reuse_fraction_median": 0.7380952380952381,
+    "reuse_fraction_mean": 0.5968501984126984,
+    "changing_only_reuse_median": 0.7380952380952381
+  },
+  "libreoffice_calc_4096": {
+    "n": 64,
+    "unique_tasks": 1,
+    "main_transitions": 0,
+    "no_pixel_change": 0,
+    "reuse_fraction_median": 0.8008175399479747,
+    "reuse_fraction_mean": 0.6421811129691565,
+    "changing_only_reuse_median": 0.8008175399479747
+  }
+}
