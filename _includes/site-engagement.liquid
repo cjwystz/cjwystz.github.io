@@ -1,0 +1,17 @@
+<aside class="site-engagement container my-4" aria-label="访问统计与点赞">
+  <p>全站访问次数：<span data-site-visits aria-live="polite">加载中…</span></p>
+  {% if page.layout == 'post' %}
+    {% assign like_url = page.url | absolute_url %}
+    {% assign like_label = '给这篇文章点赞' %}
+  {% else %}
+    {% assign like_url = '/' | absolute_url %}
+    {% assign like_label = '给网站点赞' %}
+  {% endif %}
+  <button type="button" class="btn btn-outline-primary" data-like-url="{{ like_url | escape }}" disabled>
+    ♥ {{ like_label }} · <span data-like-count>加载中…</span>
+  </button>
+  <span data-like-status role="status" class="ml-2"></span>
+  <small class="d-block mt-2 text-muted">无需登录，可多次点赞。访问次数按页面加载累计；统计由不蒜子和 Applause 社区服务提供。</small>
+  <noscript>开启 JavaScript 后可查看统计并点赞。</noscript>
+</aside>
+<script defer src="{{ '/assets/js/site-engagement.js' | relative_url }}"></script>
