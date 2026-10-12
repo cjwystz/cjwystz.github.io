@@ -1,0 +1,397 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> 基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理 | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="从 token、Embedding、Attention 和 FFN 出发，串起 Prefill、Decode、KV Cache、显存估算与服务调度；附教学计算和可运行的最小注意力练习。"> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/llm-foundations-01-architecture-to-inference/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理</h1> <p class="post-meta"> 发布于 2026 年 10 月 13 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/transformer"> <i class="fa-solid fa-hashtag fa-sm"></i> transformer</a>   <a href="/blog/tag/attention"> <i class="fa-solid fa-hashtag fa-sm"></i> attention</a>   <a href="/blog/tag/prefill"> <i class="fa-solid fa-hashtag fa-sm"></i> prefill</a>   <a href="/blog/tag/decode"> <i class="fa-solid fa-hashtag fa-sm"></i> decode</a>   <a href="/blog/tag/kv-cache"> <i class="fa-solid fa-hashtag fa-sm"></i> kv-cache</a>   <a href="/blog/tag/learning-notes"> <i class="fa-solid fa-hashtag fa-sm"></i> learning-notes</a>   ·   <a href="/blog/category/foundations"> <i class="fa-solid fa-tag fa-sm"></i> foundations</a>   <a href="/blog/category/llm-serving"> <i class="fa-solid fa-tag fa-sm"></i> llm-serving</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#1-%E6%A8%A1%E5%9E%8B%E7%9A%84%E5%9F%BA%E6%9C%AC%E4%BB%BB%E5%8A%A1%E9%A2%84%E6%B5%8B%E4%B8%8B%E4%B8%80%E4%B8%AA-token">1. 模型的基本任务：预测下一个 token</a></li> <li class="toc-entry toc-h2"><a href="#2-token%E6%A8%A1%E5%9E%8B%E5%A4%84%E7%90%86%E7%9A%84%E5%8D%95%E4%BD%8D%E4%B8%8D%E6%98%AF%E4%B8%80%E4%B8%AA%E6%B1%89%E5%AD%97">2. Token：模型处理的单位不是“一个汉字”</a></li> <li class="toc-entry toc-h2"><a href="#3-embedding%E6%9F%A5%E8%A1%A8%E5%BE%97%E5%88%B0%E5%90%91%E9%87%8F%E5%86%8D%E9%80%90%E5%B1%82%E6%9B%B4%E6%96%B0">3. Embedding：查表得到向量，再逐层更新</a></li> <li class="toc-entry toc-h2"><a href="#4-%E4%B8%80%E5%BC%A0%E7%BB%93%E6%9E%84%E5%9B%BEdecoder-only-%E6%A8%A1%E5%9E%8B%E6%80%8E%E4%B9%88%E8%B5%B0%E5%AE%8C%E5%89%8D%E5%90%91">4. 一张结构图：Decoder-only 模型怎么走完前向</a></li> <li class="toc-entry toc-h2"><a href="#5-attentionqkv-%E5%88%86%E5%88%AB%E5%81%9A%E4%BB%80%E4%B9%88">5. Attention：Q、K、V 分别做什么</a></li> <li class="toc-entry toc-h2"><a href="#6-%E7%94%A8%E4%B8%89%E4%B8%AA%E4%BD%8D%E7%BD%AE%E6%89%8B%E7%AE%97%E4%B8%80%E6%AC%A1%E6%B3%A8%E6%84%8F%E5%8A%9B">6. 用三个位置手算一次注意力</a></li> <li class="toc-entry toc-h2"><a href="#7-multi-head-%E4%B8%8E-gqa%E4%B8%BA%E4%BB%80%E4%B9%88-q-%E5%A4%B4%E6%95%B0%E5%92%8C-kv-%E5%A4%B4%E6%95%B0%E4%B8%8D%E5%90%8C">7. Multi-Head 与 GQA：为什么 Q 头数和 KV 头数不同</a></li> <li class="toc-entry toc-h2"> <a href="#8-%E4%BD%8D%E7%BD%AE%E5%BD%92%E4%B8%80%E5%8C%96%E4%B8%8E-ffnattention-%E4%B9%8B%E5%A4%96%E7%9A%84%E4%B8%89%E4%B8%AA%E9%87%8D%E8%A6%81%E9%83%A8%E5%88%86">8. 位置、归一化与 FFN：Attention 之外的三个重要部分</a> <ul> <li class="toc-entry toc-h3"><a href="#81-%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E4%BD%8D%E7%BD%AE%E4%BF%A1%E6%81%AF">8.1 为什么需要位置信息</a></li> <li class="toc-entry toc-h3"><a href="#82-norm-%E7%A8%B3%E5%AE%9A%E6%95%B0%E5%80%BC%E5%B0%BA%E5%BA%A6%E6%AE%8B%E5%B7%AE%E4%BF%9D%E7%95%99%E6%9B%B4%E6%96%B0%E5%89%8D%E7%9A%84%E4%BF%A1%E6%81%AF">8.2 Norm 稳定数值尺度，残差保留更新前的信息</a></li> <li class="toc-entry toc-h3"><a href="#83-ffn-%E5%9C%A8%E6%AF%8F%E4%B8%AA%E4%BD%8D%E7%BD%AE%E4%B8%8A%E5%8F%98%E6%8D%A2%E5%90%91%E9%87%8F">8.3 FFN 在每个位置上变换向量</a></li> </ul> </li> <li class="toc-entry toc-h2"><a href="#9-lm-head-%E4%B8%8E%E9%87%87%E6%A0%B7%E5%90%91%E9%87%8F%E5%A6%82%E4%BD%95%E5%8F%98%E6%88%90%E8%BE%93%E5%87%BA%E6%96%87%E5%AD%97">9. LM Head 与采样：向量如何变成输出文字</a></li> <li class="toc-entry toc-h2"><a href="#10-prefill-%E4%B8%8E-decode%E5%90%8C%E4%B8%80%E5%A5%97%E6%A8%A1%E5%9E%8B%E4%B8%A4%E7%A7%8D%E5%B7%A5%E4%BD%9C%E5%BD%A2%E6%80%81">10. Prefill 与 Decode：同一套模型，两种工作形态</a></li> <li class="toc-entry toc-h2"><a href="#11-kv-cache%E5%AD%98%E7%9A%84%E6%98%AF%E4%BB%80%E4%B9%88%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%8A%8A-q-%E4%B9%9F%E7%BC%93%E5%AD%98%E4%B8%8B%E6%9D%A5">11. KV Cache：存的是什么，为什么不把 Q 也缓存下来</a></li> <li class="toc-entry toc-h2"><a href="#12-%E6%89%8B%E7%AE%97%E4%B8%80%E6%AC%A1-kv-%E6%98%BE%E5%AD%98%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E5%8F%AA%E7%9C%8B%E6%A8%A1%E5%9E%8B%E5%8F%82%E6%95%B0%E9%87%8F">12. 手算一次 KV 显存：为什么不能只看模型参数量</a></li> <li class="toc-entry toc-h2"><a href="#13-%E4%B8%BA%E4%BB%80%E4%B9%88-prefill-%E4%B8%8E-decode-%E7%9A%84%E6%80%A7%E8%83%BD%E5%B8%B8%E5%B8%B8%E4%B8%8D%E5%90%8C">13. 为什么 Prefill 与 Decode 的性能常常不同</a></li> <li class="toc-entry toc-h2"><a href="#14-flashattentionpagedattention-%E4%B8%8E-prefix-caching%E5%88%86%E5%88%AB%E5%9C%A8%E4%BC%98%E5%8C%96%E5%93%AA%E4%B8%80%E5%B1%82">14. FlashAttention、PagedAttention 与 Prefix Caching：分别在优化哪一层</a></li> <li class="toc-entry toc-h2"><a href="#15-continuous-batching-%E4%B8%8E-chunked-prefill%E6%9C%8D%E5%8A%A1%E7%B3%BB%E7%BB%9F%E5%A6%82%E4%BD%95%E7%BB%84%E7%BB%87%E5%B7%A5%E4%BD%9C">15. Continuous Batching 与 Chunked Prefill：服务系统如何组织工作</a></li> <li class="toc-entry toc-h2"><a href="#16-pd-%E5%88%86%E7%A6%BB%E4%B8%8E%E8%BF%99%E6%AC%A1-pr%E7%BB%93%E6%9E%84%E7%9F%A5%E8%AF%86%E6%80%8E%E4%B9%88%E8%90%BD%E5%88%B0%E7%B3%BB%E7%BB%9F%E9%87%8C">16. P/D 分离与这次 PR：结构知识怎么落到系统里</a></li> <li class="toc-entry toc-h2"><a href="#17-%E4%B8%89%E4%B8%AA%E5%B8%B8%E8%A7%81%E5%BB%B6%E8%BF%9F%E6%8C%87%E6%A0%87%E6%80%8E%E4%B9%88%E8%AF%BB">17. 三个常见延迟指标怎么读</a></li> <li class="toc-entry toc-h2"><a href="#18-%E5%8F%AF%E8%BF%90%E8%A1%8C%E7%9A%84%E5%B0%8F%E7%BB%83%E4%B9%A0%E9%AA%8C%E8%AF%81%E7%BC%93%E5%AD%98%E4%B8%BA%E4%BB%80%E4%B9%88%E8%83%BD%E5%A4%8D%E7%94%A8">18. 可运行的小练习：验证缓存为什么能复用</a></li> <li class="toc-entry toc-h2"><a href="#19-%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86%E5%B7%A9%E5%9B%BA%E5%85%88%E8%87%AA%E5%B7%B1%E5%9B%9E%E7%AD%94%E5%86%8D%E5%B1%95%E5%BC%80%E7%AD%94%E6%A1%88">19. 基础知识巩固：先自己回答，再展开答案</a></li> <li class="toc-entry toc-h2"><a href="#20-%E4%B8%8B%E4%B8%80%E6%AC%A1%E8%AF%BB%E6%A8%A1%E5%9E%8B%E4%BB%A3%E7%A0%81%E6%97%B6%E5%8F%AF%E4%BB%A5%E6%B2%BF%E7%9D%80%E8%BF%99%E6%9D%A1%E8%B7%AF%E7%BA%BF%E6%A3%80%E6%9F%A5">20. 下一次读模型代码时，可以沿着这条路线检查</a></li> <li class="toc-entry toc-h2"><a href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99">参考资料</a></li> </ul> </div> <hr> <div id="markdown-content"> <p>这篇开始一个长期的<strong>基础知识巩固</strong>栏目。我也想借写作把自己对大模型的理解补扎实：看得懂公式，能解释一次推理具体做了什么，再把这些概念与 vLLM、SGLang 和昇腾上的工程问题联系起来。</p> <p>第一篇先建立完整的计算链路。读完应该能回答：为什么输入要先分词？Attention 到底算什么？模型为什么一层层堆叠？Prefill 和 Decode 有什么不同？KV Cache 存了什么，为什么会吃掉显存？</p> <p>本文以<strong>常见的 dense、decoder-only、因果 Transformer 文本模型</strong>为主。MoE、滑动窗口、线性注意力、多模态和投机解码有不同的细节，后面会分别展开。文中的尺寸和算例都是教学假设，不是某个真实模型的配置或服务器实测。</p> <p>系列入口：<a href="/blog/llm-foundations/">基础知识巩固</a>。建议先看结构，再看推理时间线，最后做文末的小练习，不必一开始记住所有缩写。</p> <h2 id="1-模型的基本任务预测下一个-token">1. 模型的基本任务：预测下一个 token</h2> <p>对自回归语言模型，最基本的任务是：给定已有 token，预测下一个 token 的概率。</p> \[p(x_1,\ldots,x_n)=\prod_{t=1}^{n}p(x_t\mid x_1,\ldots,x_{t-1})\] <p>例如输入“北京是中国的”，模型最后输出的不是一句完整回答，而是词表中每个候选 token 的分数。经过采样策略选出一个 token 后，把它加入上下文，再预测下一个。</p> <p>这并不意味着模型只能做续写。问答、代码、翻译等任务可以通过提示词或对话模板表达成这种序列预测问题。预训练和后训练会影响模型学到的规律与行为，但服务阶段依然需要执行具体的前向计算。</p> <p>要区分两件事：<strong>参数是训练得到的长期状态，上下文和 KV Cache 是某次请求的运行状态。</strong> 一般推理不会更新权重，但会不断更新请求的缓存。</p> <h2 id="2-token模型处理的单位不是一个汉字">2. Token：模型处理的单位不是“一个汉字”</h2> <p>Tokenizer 把文本映射成 token ID。一个 token 可能是词、子词、字符的一部分，或某种字节序列的表示；具体边界取决于分词器。因此不能固定认为“一个汉字等于一个 token”，也不能拿字符数直接代替模型输入长度。</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>文本 → Tokenizer → [token ID 0, token ID 1, ...] → 模型
+</code></pre></div></div> <p>对话服务还会添加角色标记、分隔符等模板内容。用户看见的一句话，进入模型的序列可能包含这些额外 token。工具调用、图片编码后的表示等也可能引入额外输入，不能只按可见文字估计长度。</p> <p>Token ID 是词表中的编号。编号 100 比编号 50 大，并不表示它“语义更强”或“更接近编号 101”。模型要通过 Embedding，把这个离散编号变成可参与数值计算的向量。</p> <h2 id="3-embedding查表得到向量再逐层更新">3. Embedding：查表得到向量，再逐层更新</h2> <p>设词表大小为 <code class="language-plaintext highlighter-rouge">V</code>，模型隐藏维度为 <code class="language-plaintext highlighter-rouge">d</code>，Embedding 参数表的形状是：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>E: [V, d]
+输入 ID: [T]
+查表后的 X: [T, d]
+</code></pre></div></div> <p>每个 token 取出一个 <code class="language-plaintext highlighter-rouge">d</code> 维向量。随着它经过模型，各层会根据上下文更新这个表示。相同 token 的初始查表向量相同，但出现在不同上下文中，后续隐藏状态可以不同。</p> <p>例如“苹果发布了新产品”和“苹果已经成熟了”中的“苹果”，需要通过上下文被处理成不同的含义。单独查一次词表并不能完成这个区分。</p> <p>如果包含 batch，常见逻辑形状可以写成 <code class="language-plaintext highlighter-rouge">[B, T, d]</code>。真实推理框架可能把不同请求的 token 打包成 <code class="language-plaintext highlighter-rouge">[N, d]</code>，再用元数据区分请求和位置。<strong>逻辑维度与物理内存布局要分开看</strong>，这一点之后理解 KV 缓存很重要。</p> <h2 id="4-一张结构图decoder-only-模型怎么走完前向">4. 一张结构图：Decoder-only 模型怎么走完前向</h2> <p>原始 Transformer 论文讨论的是 encoder-decoder 结构，不能直接把原论文整张架构图当成所有现代语言模型的结构。下面画的是本文采用的常见 decoder-only 路径。<a href="https://arxiv.org/abs/1706.03762" rel="external nofollow noopener" target="_blank">原始论文</a>给出了 Attention、残差连接等基础设计；现代模型在归一化、位置编码和 FFN 等部分又有不同选择。</p> <pre><code class="language-mermaid">flowchart TD
+    A["输入文本与对话模板"] --&gt; B["Tokenizer：得到 token ID"]
+    B --&gt; C["Embedding：得到隐藏向量"]
+    C --&gt; D["Transformer Block × L"]
+    D --&gt; E["最终归一化"]
+    E --&gt; F["LM Head：得到词表 logits"]
+    F --&gt; G["采样与停止判断"]
+    G --&gt; H["输出 token"]
+    H --&gt; I["继续生成时输入新 token，复用历史 KV"]
+    I --&gt; C
+</code></pre> <p>以常见的 <strong>Pre-Norm</strong> block 为例，可以写成：</p> \[u=x+\mathrm{Attention}(\mathrm{Norm}(x))\] \[y=u+\mathrm{FFN}(\mathrm{Norm}(u))\] <p>其中 Attention 让不同位置之间交换信息，FFN 对每个位置的向量进行变换，残差连接把输入保留下来并加上新的更新。重复 <code class="language-plaintext highlighter-rouge">L</code> 层后，得到更深的上下文表示。</p> <p>这是一个常见示意，不是所有模型的精确计算图。实际模型可能有额外归一化、不同残差布局、不同注意力类型或 MoE。读实现时，应以对应模型的源码和配置为准。</p> <h2 id="5-attentionqkv-分别做什么">5. Attention：Q、K、V 分别做什么</h2> <p>对某层的输入 <code class="language-plaintext highlighter-rouge">X</code>，先做三次线性投影：</p> \[Q=XW_Q,\quad K=XW_K,\quad V=XW_V\] <p>可以暂时把 <code class="language-plaintext highlighter-rouge">Q</code> 理解成“当前位置想查询什么”，<code class="language-plaintext highlighter-rouge">K</code> 理解成“其他位置用于匹配的特征”，<code class="language-plaintext highlighter-rouge">V</code> 理解成“匹配后实际汇总的内容”。这只是帮助记忆的比喻，三者本质都是训练得到的数值向量，不是人工写好的标签或文本。</p> <p>对一个 query 位置 <code class="language-plaintext highlighter-rouge">i</code>，计算它与允许访问的各个 key 的点积，得到分数；经过 softmax 得到权重，再对 value 加权求和：</p> \[\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\left(\frac{QK^{\mathsf T}}{\sqrt{d_k}}+M\right)V\] <p><code class="language-plaintext highlighter-rouge">d_k</code> 是每个 head 的 key/query 维度。除以其平方根有助于控制点积分数的尺度。<code class="language-plaintext highlighter-rouge">M</code> 是 mask：允许访问的地方加 0，被禁止的位置可以在数学上记为负无穷，使其 softmax 权重为 0。</p> <p>对于因果注意力，位置 <code class="language-plaintext highlighter-rouge">i</code> 只能看自己和之前的位置，不能读取后面的 token。即使训练时整段文本都已知，也需要这项限制，否则下一词预测会泄漏答案。</p> <h2 id="6-用三个位置手算一次注意力">6. 用三个位置手算一次注意力</h2> <p>设某个 query 与三个 key 的分数在缩放后为 <code class="language-plaintext highlighter-rouge">[2, 1, 0]</code>。softmax 后约为：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[0.6652, 0.2447, 0.0900]
+</code></pre></div></div> <p>如果三个 value 向量分别为 <code class="language-plaintext highlighter-rouge">[1, 0]</code>、<code class="language-plaintext highlighter-rouge">[0, 2]</code> 和 <code class="language-plaintext highlighter-rouge">[1, 1]</code>，输出就是：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>0.6652 × [1, 0] + 0.2447 × [0, 2] + 0.0900 × [1, 1]
+≈ [0.7553, 0.5795]
+</code></pre></div></div> <p>这说明 Attention 通常不是“选中一个位置并复制它”，而是按权重汇总内容。某些分布可能非常尖锐，但不能把这种情况当成一般定义。</p> <p>如果第三个位置在未来，需要先把第三个分数设为负无穷，再做 softmax，结果约为 <code class="language-plaintext highlighter-rouge">[0.7311, 0.2689, 0]</code>。<strong>不能先算 softmax 再直接把第三项清零</strong>，否则剩下的权重通常不再加和为 1。</p> <h2 id="7-multi-head-与-gqa为什么-q-头数和-kv-头数不同">7. Multi-Head 与 GQA：为什么 Q 头数和 KV 头数不同</h2> <p>多头注意力把投影后的表示拆成多个 head，各自在其子空间中做注意力，再合并并通过输出投影。它并不保证“一个 head 必然负责语法，另一个负责事实”，这种分工要靠具体分析，不能当成架构定义。</p> <p>常见的头数关系如下：</p> <table> <thead> <tr> <th>形式</th> <th>Query 头数 <code class="language-plaintext highlighter-rouge">Hq</code> </th> <th>KV 头数 <code class="language-plaintext highlighter-rouge">Hkv</code> </th> <th>关系</th> </tr> </thead> <tbody> <tr> <td>MHA</td> <td>多个</td> <td>与 Query 相同</td> <td>每个 Query head 有对应 KV head</td> </tr> <tr> <td>MQA</td> <td>多个</td> <td>1</td> <td>全部 Query head 共享一组 K/V</td> </tr> <tr> <td>GQA</td> <td>多个</td> <td>介于两者之间</td> <td>每组 Query head 共享一组 K/V</td> </tr> </tbody> </table> <p><a href="https://arxiv.org/abs/2305.13245" rel="external nofollow noopener" target="_blank">GQA 原论文</a>讨论了这种位于 MHA 与 MQA 之间的设计。对服务系统，一个直接的意义是：缓存按 KV head 保存，因此减少 <code class="language-plaintext highlighter-rouge">Hkv</code> 可以减少 KV 容量和读缓存的数据量；不能在估算时直接把 Query 头数代进去。</p> <p>以教学配置 <code class="language-plaintext highlighter-rouge">d=4096、Hq=32、Hkv=8、head_dim=128</code> 为例，忽略 batch 后：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>输入 X:        [T, 4096]
+投影后的 Q:    [T, 32 × 128] → [32, T, 128]
+投影后的 K/V:  [T,  8 × 128] → [ 8, T, 128]
+Attention 输出: [32, T, 128] → [T, 4096]
+</code></pre></div></div> <p>每四个 Query head 共享一个 KV head。实现可以按组进行计算，不必真的把 KV 数据复制成 32 份再存入缓存。不同模型也可能使用不同的 key/value 维度，以上形状只针对这个教学设定。</p> <h2 id="8-位置归一化与-ffnattention-之外的三个重要部分">8. 位置、归一化与 FFN：Attention 之外的三个重要部分</h2> <h3 id="81-为什么需要位置信息">8.1 为什么需要位置信息</h3> <p>如果没有提供位置信息，仅靠同一套投影和内容匹配，模型很难表达我们需要的顺序关系。因果 mask 限定可见范围，但不能完整替代位置表示。</p> <p>常见的 RoPE 会按位置旋转 Query 和 Key 的向量分量，使它们的点积携带相对位置信息。这里不展开旋转矩阵，只记住：<strong>位置会影响注意力计算，缓存的 K 必须与正确的位置处理保持一致。</strong> 常见实现把施加 RoPE 后的 K 存入缓存；缓存复用不能随意忽略位置与模型配置。<a href="https://arxiv.org/abs/2104.09864" rel="external nofollow noopener" target="_blank">RoFormer 论文</a></p> <h3 id="82-norm-稳定数值尺度残差保留更新前的信息">8.2 Norm 稳定数值尺度，残差保留更新前的信息</h3> <p>以 RMSNorm 为例，对单个 token 的 <code class="language-plaintext highlighter-rouge">d</code> 维向量做：</p> \[\mathrm{RMSNorm}(x)_j=\gamma_j\frac{x_j}{\sqrt{\frac{1}{d}\sum_{k=1}^{d}x_k^2+\epsilon}}\] <p>这里的求和发生在隐藏维度上，不是把整条请求或整个 batch 混起来求一个平均。<code class="language-plaintext highlighter-rouge">gamma</code> 是学习得到的缩放参数，<code class="language-plaintext highlighter-rouge">epsilon</code> 用于数值稳定。RMSNorm 不做 LayerNorm 那样的减均值；具体模型可能再有其他处理。<a href="https://arxiv.org/abs/1910.07467" rel="external nofollow noopener" target="_blank">RMSNorm 论文</a></p> <p>残差连接中的 <code class="language-plaintext highlighter-rouge">x + 更新量</code> 则让子层可以在已有表示上修改，而不是每次完全替换。它也有利于训练深层网络，但不能只靠“有残差”就推断任意深度模型都容易训练。</p> <h3 id="83-ffn-在每个位置上变换向量">8.3 FFN 在每个位置上变换向量</h3> <p>一个普通 FFN 可以先把维度从 <code class="language-plaintext highlighter-rouge">d</code> 扩到 <code class="language-plaintext highlighter-rouge">d_ff</code>，经过非线性，再投影回 <code class="language-plaintext highlighter-rouge">d</code>。常见的 SwiGLU 写法为：</p> \[\mathrm{FFN}(x)=\left[\mathrm{SiLU}(xW_g)\odot(xW_u)\right]W_d\] <p>其中 <code class="language-plaintext highlighter-rouge">odot</code> 是逐元素乘法，前两条投影形成门控和内容，最后投回隐藏维度。这里忽略 bias 等模型细节。<a href="https://arxiv.org/abs/2002.05202" rel="external nofollow noopener" target="_blank">GLU 变体论文</a></p> <p>“逐位置”意味着这个 FFN 子层不直接把位置 <code class="language-plaintext highlighter-rouge">i</code> 与位置 <code class="language-plaintext highlighter-rouge">j</code> 做交互，但它收到的输入已经由 Attention 融入了上下文。FFN 往往包含大量参数和矩阵乘，分析大模型性能时不能只盯着 Attention。</p> <h2 id="9-lm-head-与采样向量如何变成输出文字">9. LM Head 与采样：向量如何变成输出文字</h2> <p>最后的隐藏向量通过 LM Head，得到词表大小 <code class="language-plaintext highlighter-rouge">V</code> 的 logits：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>最后一个位置的隐藏向量: [d]
+输出投影:               [d, V]
+logits:                 [V]
+</code></pre></div></div> <p>Logits 是未归一化分数。模型参数中，输入 Embedding 与输出投影可能共享，也可能不共享。后面才是 softmax、采样和停止判断。</p> <table> <thead> <tr> <th>策略</th> <th>基本含义</th> </tr> </thead> <tbody> <tr> <td>Greedy</td> <td>取分数最大的 token</td> </tr> <tr> <td>Temperature</td> <td>正温度下用 <code class="language-plaintext highlighter-rouge">logits / temperature</code> 调整分布的尖锐程度</td> </tr> <tr> <td>Top-k</td> <td>把候选限制在分数最高的 k 个 token 中</td> </tr> <tr> <td>Top-p</td> <td>按概率排序，保留累计概率达到阈值的候选集合</td> </tr> </tbody> </table> <p>常见服务 API 将 <code class="language-plaintext highlighter-rouge">temperature=0</code> 定义为 greedy，不是直接执行除以零。采样策略改变输出选择，通常没有改变前面的 Transformer 权重或整套前向计算。</p> <p>选出的 token ID 经过 detokenization 变回文本。一个 token 可能只对应文字的一部分，所以“输出一个 token”不保证界面立刻多出一个完整汉字。流式服务还会涉及缓冲、网络和停止序列处理。</p> <p>即使使用 greedy，不同硬件、kernel 或数值精度也不保证所有模型都逐 token 相同。Greedy 消除了采样随机性，却没有消除数值误差可能导致的排序变化。</p> <h2 id="10-prefill-与-decode同一套模型两种工作形态">10. Prefill 与 Decode：同一套模型，两种工作形态</h2> <p>设提示词有 <code class="language-plaintext highlighter-rouge">N</code> 个 token，要生成 <code class="language-plaintext highlighter-rouge">G</code> 个新 token。</p> <p><strong>Prefill</strong> 处理已知提示词，计算各层的上下文表示和 KV。因果 mask 限制了每个位置的可见范围，但提示词本身全部已知，因此一层内部可以用并行矩阵运算处理多个位置。不同层之间仍然存在依赖。</p> <p>提示词最后一个位置的输出给出下一个 token 的 logits，采样得到 <code class="language-plaintext highlighter-rouge">y1</code>。因此，<strong>第一枚输出 token 通常已经由 Prefill 的前向计算产生</strong>。</p> <p>接下来进行标准的增量 <strong>Decode</strong>：把 <code class="language-plaintext highlighter-rouge">y1</code> 作为新输入，复用提示词的 KV，计算 <code class="language-plaintext highlighter-rouge">y1</code> 自身在各层的 K/V 和隐藏状态，再预测 <code class="language-plaintext highlighter-rouge">y2</code>。然后输入 <code class="language-plaintext highlighter-rouge">y2</code>，预测 <code class="language-plaintext highlighter-rouge">y3</code>，如此循环。</p> <pre><code class="language-mermaid">sequenceDiagram
+    participant U as 用户请求
+    participant M as 模型
+    participant K as 每层 KV Cache
+    U-&gt;&gt;M: 输入 x1...xN
+    M-&gt;&gt;K: Prefill 写入提示词 K/V
+    M--&gt;&gt;U: 根据最后位置 logits 选出 y1
+    U-&gt;&gt;M: 下一步输入 y1
+    M-&gt;&gt;K: 读取历史 KV，写入 y1 的 K/V
+    M--&gt;&gt;U: 选出 y2
+    U-&gt;&gt;M: 下一步输入 y2
+    M-&gt;&gt;K: 继续复用和增长缓存
+    M--&gt;&gt;U: 选出 y3
+</code></pre> <p>这里用“用户请求”表示生成循环的控制方，不是要求用户手动把每个 token 发回服务器。实际服务会在引擎内部完成循环。</p> <p>另一个要注意的时间点是：<strong>选出 token，不等于它的 KV 已经存在。</strong> <code class="language-plaintext highlighter-rouge">y1</code> 刚被选出时，缓存通常只有提示词的 K/V；必须把 <code class="language-plaintext highlighter-rouge">y1</code> 送入下一次前向，才计算它的 K/V。对标准的一次生成循环，输出 <code class="language-plaintext highlighter-rouge">G</code> 个 token 的概念路径是一次 Prefill 加 <code class="language-plaintext highlighter-rouge">G−1</code> 次增量前向；框架内部的记账方式、投机解码或特殊协议可能有所不同。</p> <table> <thead> <tr> <th>问题</th> <th>Prefill</th> <th>标准增量 Decode</th> </tr> </thead> <tbody> <tr> <td>输入是否已知</td> <td>整段待处理提示词已知</td> <td>当前新 token 已知，后续 token 未知</td> </tr> <tr> <td>单次每个请求处理的位置数</td> <td>可以是多个，也可能分 chunk</td> <td>通常一个新位置</td> </tr> <tr> <td>是否执行所有层</td> <td>是</td> <td>是</td> </tr> <tr> <td>是否更新权重</td> <td>一般推理不更新</td> <td>一般推理不更新</td> </tr> <tr> <td>对 KV 的作用</td> <td>建立提示词缓存</td> <td>读取历史并追加新位置缓存</td> </tr> </tbody> </table> <p>训练时常用已知真实序列同时构造多个下一词预测目标，也会采用因果 mask；这是 teacher forcing。它与提示词 Prefill 都能利用已知输入的并行性，但训练还需要 loss、反向传播和优化器状态，不能把两者的显存需求直接等同。</p> <h2 id="11-kv-cache存的是什么为什么不把-q-也缓存下来">11. KV Cache：存的是什么，为什么不把 Q 也缓存下来</h2> <p>在标准因果全注意力中，新位置的 Query 需要与历史位置的 Key 匹配，并汇总历史 Value。历史 token 的 K/V 在其所在层已经算过，在模型、位置和上下文条件不变时可以直接复用。</p> <p>Query 是当前待计算位置拿来查询历史的。未来位置会生成自己的 Query；一般没有必要保存旧 Query 来帮助它们查询。因此服务中的长期注意力缓存主要保存 K 和 V。</p> <p>还有一个因果性的关键：旧位置不能看未来位置，追加 token 不会让旧位置突然获得新的可见历史，所以旧位置的表示不需要因追加未来 token 而重算。若换成可双向访问的模型，或改变前缀、位置编码和其他条件，就不能照搬这个理由。</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>第 ℓ 层缓存：K₁...Kₜ、V₁...Vₜ
+新位置：计算 qₜ₊₁、kₜ₊₁、vₜ₊₁
+注意力：qₜ₊₁ 查询 K₁...Kₜ₊₁，汇总 V₁...Vₜ₊₁
+</code></pre></div></div> <p>KV Cache 并没有免掉新 token 的 Embedding、Q/K/V 投影、Attention、FFN 和 LM Head。它主要免掉了历史 token 的重复前向计算。Decode 仍然要做所有层，也仍然需要读缓存。</p> <p>没有 KV Cache 时，为产生下一 token，可以对增长后的整个前缀重新做前向；有缓存时，只计算新位置并复用历史结果。在正确实现和数值误差允许的范围内，两条路径应具有一致语义，后面的练习就会直接检查这一点。</p> <h2 id="12-手算一次-kv-显存为什么不能只看模型参数量">12. 手算一次 KV 显存：为什么不能只看模型参数量</h2> <p>对各层参数相同、使用普通全注意力的教学模型，忽略 padding、分配器、量化元数据和并行布局，缓存容量近似为：</p> \[\mathrm{KV\ bytes}=2\times L\times B\times T\times H_{kv}\times d_{head}\times s\] <ul> <li> <code class="language-plaintext highlighter-rouge">2</code>：K 和 V 两份。</li> <li> <code class="language-plaintext highlighter-rouge">L</code>：层数；每层有自己的缓存。</li> <li> <code class="language-plaintext highlighter-rouge">B</code>：同时缓存的请求数。</li> <li> <code class="language-plaintext highlighter-rouge">T</code>：每个请求当前缓存的 token 数；请求不等长时应对各长度求和。</li> <li> <code class="language-plaintext highlighter-rouge">Hkv</code>：KV 头数，而不是 Query 头数。</li> <li> <code class="language-plaintext highlighter-rouge">d_head</code>：假设 K/V head 维度相同。</li> <li> <code class="language-plaintext highlighter-rouge">s</code>：每个缓存元素的字节数；BF16 常见为 2 字节。</li> </ul> <p>取 <code class="language-plaintext highlighter-rouge">L=32、B=1、T=8192、Hkv=8、d_head=128、s=2</code>：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2 × 32 × 1 × 8192 × 8 × 128 × 2
+= 1,073,741,824 字节
+= 1 GiB
+</code></pre></div></div> <p>这是 KV 的教学估算，不是整个服务的显存。若上下文翻倍，约变为 2 GiB；若并发请求数变为 8 且长度相同，约为 8 GiB；若把 KV 头数从 8 增加到 32，其他条件不变，约为 4 GiB。</p> <p>再假设模型有 80 亿参数，全部权重每个参数 2 字节，则仅权重约为 160 亿字节，即 16 GB、约 14.90 GiB。完整服务还需要 KV、临时激活、算子 workspace、通信缓冲、图捕获内存等。<strong>“权重能放进卡里”不是“这个上下文和并发配置能运行”的充分条件。</strong></p> <p>如果不同层保留不同长度，应该逐层求和。滑动窗口通常只需要一定范围的历史，但真实分配还受 block、额外保留 token 和实现策略影响。MLA、线性注意力或状态空间模型的缓存形态也不同，不能直接套用上面的标准 K/V 公式。</p> <h2 id="13-为什么-prefill-与-decode-的性能常常不同">13. 为什么 Prefill 与 Decode 的性能常常不同</h2> <p>对长提示词，Prefill 有较多 token 同时参与线性层运算，可以形成较大的矩阵乘，通常更容易利用加速器计算能力。全注意力的 token 对数量随长度平方增长，因此长上下文也会带来显著 Attention 计算与中间数据压力。</p> <p>小 batch Decode 每步只处理少量新 token，却仍然要访问大量权重，并读取历史 KV；计算量相对数据移动较少时，容易受内存带宽和访存效率限制。上下文增长还会增加每步读取 KV 的量。</p> <p>这是常见工作形态，不能当成不变定律。增大 batch 可以改善权重复用和矩阵乘形态；很长的上下文、MoE 通信、offload、kernel 实现和硬件差异，都可能改变瓶颈。</p> <p>可以用一个基本问题判断优化方向：<strong>这一步是在等算术计算，还是在等数据到达？</strong> 需要用 profile、实际 workload 和端到端对照回答，不能仅凭“这个算子更快”就推出服务更快。</p> <h2 id="14-flashattentionpagedattention-与-prefix-caching分别在优化哪一层">14. FlashAttention、PagedAttention 与 Prefix Caching：分别在优化哪一层</h2> <p>这些名字经常一起出现，但处理的问题不同。</p> <table> <thead> <tr> <th>技术</th> <th>主要处理的问题</th> <th>不应误解为</th> </tr> </thead> <tbody> <tr> <td>FlashAttention</td> <td>用分块与在线 softmax 等方式减少 Attention 的中间数据读写</td> <td>自动把全注意力改成线性复杂度</td> </tr> <tr> <td>PagedAttention</td> <td>管理和访问以 block 组织的 KV，减少分配浪费并支持灵活共享</td> <td>取消 Attention 计算</td> </tr> <tr> <td>Prefix Caching</td> <td>在条件一致且前缀匹配时复用已算出的前缀 KV</td> <td>按语义相似度随意复用缓存</td> </tr> </tbody> </table> <p><a href="https://arxiv.org/abs/2205.14135" rel="external nofollow noopener" target="_blank">FlashAttention</a>通过 IO-aware 的计算组织避免直接在高带宽显存里保存完整的巨大 attention score 矩阵。全注意力的数学计算量仍随 token 对数量增长；不同数值执行顺序也可能带来浮点差异。</p> <p><a href="https://arxiv.org/abs/2309.06180" rel="external nofollow noopener" target="_blank">PagedAttention</a>把逻辑连续的 KV 序列映射到物理 block。逻辑上位置依次排列，不要求它们都在一整块连续物理内存里；执行时用 block table 找到实际数据。分页减少的是分配约束和浪费，block 内仍可能有尾部未使用空间。</p> <p><a href="https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/" rel="external nofollow noopener" target="_blank">Prefix Caching</a>复用已经算过的共同前缀，可以减少后续请求的重复 Prefill。可复用性还取决于模型、适配器、位置和输入内容等条件；“两句话意思差不多”并不构成可复用依据。它没有自动免掉每个新生成 token 的 Decode 计算。</p> <h2 id="15-continuous-batching-与-chunked-prefill服务系统如何组织工作">15. Continuous Batching 与 Chunked Prefill：服务系统如何组织工作</h2> <p>一个请求要自回归生成，但多个请求可以在同一个调度步中一起运行。Continuous batching 会在迭代边界让已完成请求退出、让新请求加入，而不是要求一批请求全部结束才接收下一批。</p> <p>因此，“一个请求一次只 Decode 一个 token”不等于“整张卡一次只能算一个 token”。一个 batch 可以包含很多请求各自的新 token，形成更大的计算工作量。</p> <p>长 Prefill 若一次占用大量资源，可能影响正在 Decode 的请求。Chunked prefill 把待处理的提示词拆成多个调度 chunk，使服务可以更灵活地分配每步 token 预算。有缓存的后续 chunk 仍需正确访问之前的上下文；拆 chunk 不等于切断语义上下文。</p> <p>实际调度要在吞吐、首 token 延迟、后续 token 延迟、缓存容量和公平性之间做取舍。不同框架和版本的策略有差异，分析时应检查实际调度器和生效的配置。</p> <h2 id="16-pd-分离与这次-pr结构知识怎么落到系统里">16. P/D 分离与这次 PR：结构知识怎么落到系统里</h2> <p>P/D 分离把 Prefill 和 Decode 放到不同实例，可以分别配置资源和调度。但 Decode 需要 Prefill 产生的每层缓存，所以必须额外完成 KV 交接。能否改善整体服务，取决于转移成本、网络、模型、负载和调度，不能只看到“分开了”就认定一定更快。</p> <p>至此，<a href="/blog/2026/vllm-ascend-mooncake-hybrid-registration/">上一日的 Mooncake 注册修复</a>就能放回完整链路：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Tokenizer → 模型 Prefill → 每层 K/V → 底层内存注册
+→ 按层地址与 block/stride 传输 → Decode 读取 KV → 生成
+</code></pre></div></div> <p>缓存的“模型语义”是某层、某位置、某个 head 的 K/V；缓存的“物理实现”则包含 storage、view、地址、stride、block table 与注册范围。</p> <p>某个层 view 的 <code class="language-plaintext highlighter-rouge">data_ptr()</code> 可以正确指向该层数据，却不是应该注册的底层 storage 起点。解决内存注册问题，既要让后端访问合法的物理范围，又要保留逻辑层地址，不能把这两种地址混为一谈。</p> <p>这也是学习基础结构的价值：遇到系统代码里的元数据，不只知道变量叫什么，还能说清它对应模型计算的哪一步。</p> <h2 id="17-三个常见延迟指标怎么读">17. 三个常见延迟指标怎么读</h2> <table> <thead> <tr> <th>指标</th> <th>看什么</th> <th>常见影响因素</th> </tr> </thead> <tbody> <tr> <td>TTFT</td> <td>从请求起点到第一个输出 token 的时间</td> <td>排队、分词／模板、Prefill、采样、网络等</td> </tr> <tr> <td>TPOT</td> <td>后续输出 token 的平均间隔</td> <td>Decode 计算、调度、通信与网络等</td> </tr> <tr> <td>吞吐</td> <td>单位时间完成的 token 或请求数量</td> <td>batch、请求长度、资源利用率与统计口径</td> </tr> </tbody> </table> <p>对有 <code class="language-plaintext highlighter-rouge">G&gt;1</code> 个输出 token 的一次请求，若用客户端接收时间计算平均后续 token 间隔，可以写成：</p> \[\mathrm{TPOT}=\frac{t_{last}-t_{first}}{G-1}\] <p>不同 benchmark 的起止点和统计方法可能不同，实验报告必须说明口径。只有一个输出 token 时，没有可供平均的后续间隔。</p> <p>还要区分平均值和尾部：吞吐很高，不代表每个请求都能满足延迟目标；平均 TTFT 很低，也可能有少数请求等很久。比较系统时，需要固定或说明输入长度、输出长度、到达率、并发与采样配置。</p> <h2 id="18-可运行的小练习验证缓存为什么能复用">18. 可运行的小练习：验证缓存为什么能复用</h2> <p>下面只实现<strong>一个单头因果 Attention 子层</strong>，不包含训练、RoPE、FFN、多层模型或真实文本生成。它把“整段已知输入一次计算”与“逐位置计算并缓存 KV”进行比较，让缓存复用的依据可直接检查。</p> <p>需要安装 PyTorch。代码使用 CPU 和 float64，小张量即可运行，不需要模型权重或 GPU/NPU。float64 只是为了让这个教学比较更清楚，不代表真实服务应该用 float64。</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="n">math</span>
+<span class="kn">import</span> <span class="n">torch</span>
+
+<span class="n">torch</span><span class="p">.</span><span class="nf">manual_seed</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span>
+<span class="n">T</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">4</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">wq</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">wk</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">wv</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randn</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="n">float64</span><span class="p">)</span>
+
+<span class="c1"># 一次处理整段已知输入：单头因果 Attention。
+</span><span class="n">q</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">x</span> <span class="o">@</span> <span class="n">wq</span><span class="p">,</span> <span class="n">x</span> <span class="o">@</span> <span class="n">wk</span><span class="p">,</span> <span class="n">x</span> <span class="o">@</span> <span class="n">wv</span>
+<span class="n">scores</span> <span class="o">=</span> <span class="n">q</span> <span class="o">@</span> <span class="n">k</span><span class="p">.</span><span class="n">T</span> <span class="o">/</span> <span class="n">math</span><span class="p">.</span><span class="nf">sqrt</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+<span class="n">allowed</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">ones</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="nb">bool</span><span class="p">).</span><span class="nf">tril</span><span class="p">()</span>
+<span class="n">scores</span> <span class="o">=</span> <span class="n">scores</span><span class="p">.</span><span class="nf">masked_fill</span><span class="p">(</span><span class="o">~</span><span class="n">allowed</span><span class="p">,</span> <span class="nf">float</span><span class="p">(</span><span class="sh">'</span><span class="s">-inf</span><span class="sh">'</span><span class="p">))</span>
+<span class="n">weights</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">softmax</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">full</span> <span class="o">=</span> <span class="n">weights</span> <span class="o">@</span> <span class="n">v</span>
+<span class="k">assert</span> <span class="n">torch</span><span class="p">.</span><span class="nf">all</span><span class="p">(</span><span class="n">weights</span><span class="p">.</span><span class="nf">triu</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+
+<span class="c1"># 每次只计算新位置的 Q/K/V，历史 K/V 直接复用。
+</span><span class="n">k_cache</span> <span class="o">=</span> <span class="n">v_cache</span> <span class="o">=</span> <span class="bp">None</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">T</span><span class="p">):</span>
+    <span class="n">new_x</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">t</span><span class="p">:</span><span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">new_q</span> <span class="o">=</span> <span class="n">new_x</span> <span class="o">@</span> <span class="n">wq</span>
+    <span class="n">new_k</span> <span class="o">=</span> <span class="n">new_x</span> <span class="o">@</span> <span class="n">wk</span>
+    <span class="n">new_v</span> <span class="o">=</span> <span class="n">new_x</span> <span class="o">@</span> <span class="n">wv</span>
+    <span class="n">k_cache</span> <span class="o">=</span> <span class="n">new_k</span> <span class="k">if</span> <span class="n">k_cache</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="n">torch</span><span class="p">.</span><span class="nf">cat</span><span class="p">([</span><span class="n">k_cache</span><span class="p">,</span> <span class="n">new_k</span><span class="p">])</span>
+    <span class="n">v_cache</span> <span class="o">=</span> <span class="n">new_v</span> <span class="k">if</span> <span class="n">v_cache</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="n">torch</span><span class="p">.</span><span class="nf">cat</span><span class="p">([</span><span class="n">v_cache</span><span class="p">,</span> <span class="n">new_v</span><span class="p">])</span>
+    <span class="n">scores</span> <span class="o">=</span> <span class="n">new_q</span> <span class="o">@</span> <span class="n">k_cache</span><span class="p">.</span><span class="n">T</span> <span class="o">/</span> <span class="n">math</span><span class="p">.</span><span class="nf">sqrt</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+    <span class="n">outputs</span><span class="p">.</span><span class="nf">append</span><span class="p">(</span><span class="n">torch</span><span class="p">.</span><span class="nf">softmax</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">v_cache</span><span class="p">)</span>
+<span class="n">incremental</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">cat</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
+
+<span class="n">torch</span><span class="p">.</span><span class="n">testing</span><span class="p">.</span><span class="nf">assert_close</span><span class="p">(</span><span class="n">full</span><span class="p">,</span> <span class="n">incremental</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">)</span>
+<span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">whole-sequence vs cached attention: PASS</span><span class="sh">'</span><span class="p">)</span>
+<span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">max absolute error:</span><span class="sh">'</span><span class="p">,</span> <span class="p">(</span><span class="n">full</span> <span class="o">-</span> <span class="n">incremental</span><span class="p">).</span><span class="nf">abs</span><span class="p">().</span><span class="nf">max</span><span class="p">().</span><span class="nf">item</span><span class="p">())</span>
+
+<span class="n">kv_bytes</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">32</span> <span class="o">*</span> <span class="mi">1</span> <span class="o">*</span> <span class="mi">8192</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">*</span> <span class="mi">128</span> <span class="o">*</span> <span class="mi">2</span>
+<span class="k">assert</span> <span class="n">kv_bytes</span> <span class="o">==</span> <span class="mi">1024</span><span class="o">**</span><span class="mi">3</span>
+<span class="nf">print</span><span class="p">(</span><span class="sh">'</span><span class="s">teaching KV cache estimate:</span><span class="sh">'</span><span class="p">,</span> <span class="n">kv_bytes</span><span class="p">,</span> <span class="sh">'</span><span class="s">bytes = 1 GiB</span><span class="sh">'</span><span class="p">)</span>
+</code></pre></div></div> <p>这段代码已在 CPU 上运行通过。运行后应看到两项检查通过：因果注意力的完整计算与缓存计算一致，教学配置的 KV 估算等于 1 GiB。浮点误差的具体末位可以随 PyTorch 和硬件环境变化；这里用容差断言，不要求输出误差恰好为零。</p> <p>可以做两个改动观察结果：第一，去掉完整计算的因果 mask，它就会看到未来 token，与增量路径一般不再一致；第二，在增量路径中删掉一部分历史 K/V，两条路径的上下文不同，结果也一般不再一致。不要通过放宽容差掩盖这两种语义变化。</p> <h2 id="19-基础知识巩固先自己回答再展开答案">19. 基础知识巩固：先自己回答，再展开答案</h2> <ol> <li>Token ID 较大，是否意味着它的语义更复杂？</li> <li>已知完整提示词，为什么 Prefill 仍需要因果 mask？</li> <li>第一个生成 token 刚选出来时，它自己的 KV 是否已经在缓存里？</li> <li>有 KV Cache 后，Decode 还要不要执行 FFN 和所有 Transformer 层？</li> <li>为什么 GQA 的 KV 估算用 KV 头数，而不是 Query 头数？</li> <li>KV 教学配置中的上下文长度和并发都翻倍，缓存容量变为原来的多少倍？</li> <li>两个提示词意思相似，能否直接复用彼此的 KV？</li> <li>FlashAttention 是否把普通全注意力的计算量变成关于长度的线性复杂度？</li> <li>为什么权重能装进显存，也可能无法运行指定的并发与上下文？</li> <li>为什么层的逻辑数据地址正确，内存注册仍可能失败？</li> </ol> <details> <summary>展开参考答案</summary> <ol> <li>不能。ID 是词表编号，模型通过 Embedding 和上下文计算获得表示。</li> <li>因为各位置的表示需要符合自回归可见性，不能让较早位置读取未来输入；“输入已知”与“允许访问”是两回事。</li> <li>在标准增量路径中通常还没有。Prefill 已计算提示词的 KV；新选出的 token 要送入下一次前向，才产生它自己的 KV。</li> <li>仍然需要。缓存免去的是历史 token 的重复前向，不是新 token 的完整计算。</li> <li>共享的是 K/V。多组 Query 可以访问同一组 KV，不应重复计入物理缓存。</li> <li>在普通全注意力、其他配置相同的近似公式中是四倍；真实布局还需考虑分块、padding 与并行策略。</li> <li>不能仅凭语义相似。通常需要精确的可复用前缀及一致的模型、位置和输入条件。</li> <li>没有。它主要改善 IO 和中间数据组织；全注意力仍需处理随长度平方增长的 token 对。</li> <li>还需要 KV、临时激活、workspace、通信缓冲等，且缓存随请求长度和并发增加。</li> <li>层的 tensor 可能是 storage 中间的 view。用于定位数据的地址与底层合法、对齐的注册范围不是同一个概念。</li> </ol> </details> <h2 id="20-下一次读模型代码时可以沿着这条路线检查">20. 下一次读模型代码时，可以沿着这条路线检查</h2> <p>从配置里的 <code class="language-plaintext highlighter-rouge">hidden_size</code>、层数、Query/KV 头数和 head 维度开始，找到 Embedding、一个 decoder layer、注意力投影、FFN 和输出 head。先标出每个算子的输入输出形状，再看缓存如何写入和读取。</p> <p>读推理框架时，沿着“请求进入 → tokenization → 调度 → model forward → KV 更新 → 采样 → 返回”追踪。对看到的每个优化，问它改变的是模型数学、数据布局、算子实现、调度，还是通信。这样再读系统 PR，会更容易分清哪些是语义要求，哪些是工程选择。</p> <p>后续可以把 Attention 的形状与数值稳定单独展开，再详细推导 KV、GQA 和滑动窗口的缓存需求。本篇先把从文本到输出、从模型到服务的完整链路接起来。</p> <h2 id="参考资料">参考资料</h2> <p>下列资料用于核对基本定义和具体技术来源；文中的教学算例与小练习不是这些论文的性能实验。</p> <ul> <li> <a href="https://arxiv.org/abs/1706.03762" rel="external nofollow noopener" target="_blank">Attention Is All You Need</a>：原始 Transformer 与 scaled dot-product attention。</li> <li> <a href="https://arxiv.org/abs/2407.21783" rel="external nofollow noopener" target="_blank">The Llama 3 Herd of Models</a>：现代 decoder-only 模型的一份完整技术报告。</li> <li> <a href="https://arxiv.org/abs/2305.13245" rel="external nofollow noopener" target="_blank">GQA</a>：Query 组共享 K/V 的设计。</li> <li> <a href="https://arxiv.org/abs/2104.09864" rel="external nofollow noopener" target="_blank">RoFormer</a>：旋转位置编码。</li> <li> <a href="https://arxiv.org/abs/1910.07467" rel="external nofollow noopener" target="_blank">Root Mean Square Layer Normalization</a>：RMSNorm。</li> <li> <a href="https://arxiv.org/abs/2002.05202" rel="external nofollow noopener" target="_blank">GLU Variants Improve Transformer</a>：门控 FFN 变体。</li> <li> <a href="https://arxiv.org/abs/2205.14135" rel="external nofollow noopener" target="_blank">FlashAttention</a>：Attention 的 IO-aware 计算组织。</li> <li> <a href="https://arxiv.org/abs/2309.06180" rel="external nofollow noopener" target="_blank">PagedAttention</a>：LLM serving 的 KV 内存管理。</li> <li> <a href="https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/" rel="external nofollow noopener" target="_blank">vLLM Automatic Prefix Caching</a>：前缀复用的作用与限制。</li> </ul> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/vllm-ascend-mooncake-hybrid-registration/">给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-research-screening/">910B3 推理研究的九条线索和实验结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-inference-audit-negative-results/">910B3 推理实验复核：从干扰微基准到完整模型的负结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-mechanism/">拆到算子看:910B3 上 prefill 和 decode 到底在争什么</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-disaggregation/">在 910B3 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/real-envelope-aigc-detection/">守真，而非逐假——AI 生成图像检测为什么总是慢半拍</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-first-agent-calibration/">跑满 4 小时、零交卷、reward 0.0——但这不是躺平</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-hard-task-no-oracle/">100 秒被秒杀之后：我们把 benchmark 升级成了"没人会做的题"</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/frontierswe-inference-task-anatomy/">解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/harbor-infra-benchmark-first-task/">把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题</a> </li> </ul> </div> </div> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer src="https://cdn.jsdelivr.net/npm/mermaid@10.7.0/dist/mermaid.min.js" integrity="sha256-TtLOdUA8mstPoO6sGvHIGx2ceXrrX4KgIItO06XOn8A=" crossorigin="anonymous"></script> <script defer src="/assets/al_charts/js/mermaid-setup.js" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "publications by categories in reversed chronological order. generated by jekyll-scholar.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Edit the `_data/repositories.yml` and change the `github_users` and `github_repos` lists to include your own GitHub profile and repositories.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "This is a description of the page. You can modify it in &#39;_pages/cv.md&#39;. You can also change or remove the top pdf download button.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-基础知识巩固-01-从-transformer-结构到大模型的一次完整推理",
+        
+          title: "基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理",
+        
+        description: "从 token、Embedding、Attention 和 FFN 出发，串起 Prefill、Decode、KV Cache、显存估算与服务调度；附教学计算和可运行的最小注意力练习。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/llm-foundations-01-architecture-to-inference/";
+          
+        },
+      },{id: "post-给-vllm-ascend-修一个-kv-缓存注册-bug-从-tensor-view-到真实-p-d-验证",
+        
+          title: "给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证",
+        
+        description: "记录 Mooncake V1 混合注意力注册路径的一个小修复：恢复底层存储地址、合并重叠区域，并用 CPU 回归与真实 Gemma 3 双卡 P/D 验证明确证据边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-ascend-mooncake-hybrid-registration/";
+          
+        },
+      },{id: "post-910b3-推理研究的九条线索和实验结果",
+        
+          title: "910B3 推理研究的九条线索和实验结果",
+        
+        description: "汇总计算干扰、KV 入站、真实 PD、hybrid 缓存和多模态方向的调研与实验，并记录通信执行路径候选从微基准交叉点到完整 TP2 对照的筛选过程。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-research-screening/";
+          
+        },
+      },{id: "post-910b3-推理实验复核-从干扰微基准到完整模型的负结果",
+        
+          title: "910B3 推理实验复核：从干扰微基准到完整模型的负结果",
+        
+        description: "修正双 stream 计时、重放相同请求 trace、调优 SGLang 基线，并验证 vector attention 与 KV 接收。干扰存在，但微基准优势没有转化为 Qwen3 完整模型收益。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-inference-audit-negative-results/";
+          
+        },
+      },{id: "post-拆到算子看-910b3-上-prefill-和-decode-到底在争什么",
+        
+          title: "拆到算子看:910B3 上 prefill 和 decode 到底在争什么",
+        
+        description: "上一篇在 910B3 上测了 PD 分离的配比效果——3P:4D 吞吐反超一体化 11%,只给 1 张 prefill 卡会把 TTFT p99 打到 9 秒。但那些都是端到端数字,回答不了&quot;为什么&quot;。这篇往下拆一层:用昇腾 msprof 把 Cube/Vector/MTE 三类执行单元分开观测,给出 prefill 与 decode 资源争抢的硬件级证据——同一个 MatMul 算子,prefill 负载下 Cube 占用 0.92,decode 负载下只有 0.14,而搬数通道 MTE2 被打满到 0.99。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-mechanism/";
+          
+        },
+      },{id: "post-在-910b3-上把-llm-推理的-quot-前菜-quot-和-quot-主菜-quot-分开炒-pd-分离实测",
+        
+          title: "在 910B3 上把 LLM 推理的&quot;前菜&quot;和&quot;主菜&quot;分开炒——PD 分离实测",
+        
+        description: "在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B3 上做了真机 PD 的配比实验:7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-disaggregation/";
+          
+        },
+      },{id: "post-守真-而非逐假-ai-生成图像检测为什么总是慢半拍",
+        
+          title: "守真，而非逐假——AI 生成图像检测为什么总是慢半拍",
+        
+        description: "AI 生成图像检测的系统性困境：检测器永远追不上生成器的迭代。这篇博客聊聊这个领域走过的几条路（GAN 指纹、DIRE、UnivFD、latent blending），以及一个换方向的思路——与其学假图长什么样，不如给真实照片的分布修一圈围墙。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/real-envelope-aigc-detection/";
+          
+        },
+      },{id: "post-跑满-4-小时-零交卷-reward-0-0-但这不是躺平",
+        
+          title: "跑满 4 小时、零交卷、reward 0.0——但这不是躺平",
+        
+        description: "开放式性能题的第一次真实 agent 校准：DeepSeek-V4.1-Flash 驱动的 claude-code 在 4B FlagScale/沐曦题上 4 小时跑满、零交卷、reward 0.0——但 3079 条轨迹里是教科书级的双峰诊断、一次通信串行化的实锤，和 +47% 的真实吞吐提升。复盘两个坑（一个算我们的，一个算它的）、阈值决策，以及为什么 binary reward 会抹掉这次实验里最有价值的信息。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-first-agent-calibration/";
+          
+        },
+      },{id: "post-100-秒被秒杀之后-我们把-benchmark-升级成了-quot-没人会做的题-quot",
+        
+          title: "100 秒被秒杀之后：我们把 benchmark 升级成了&quot;没人会做的题&quot;",
+        
+        description: "国产 infra agentic benchmark 的第一次真机校准翻车实录——精心设计的 hard 题被当代模型 100 秒连过五次，复盘出&quot;好题的三条反例&quot;，然后转身做了一道连出题团队自己都没解出来的开放式性能题：32 卡国产 GPU 上把 27B 训练吞吐推过实测纪录。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-hard-task-no-oracle/";
+          
+        },
+      },{id: "post-解剖一道顶级-agentic-考题-frontierswe-推理优化题的设计艺术",
+        
+          title: "解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术",
+        
+        description: "逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/frontierswe-inference-task-anatomy/";
+          
+        },
+      },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-mlsys-2027-submission-in-progress-heterogeneous-modeling-packing-scheduling-for-general-llm-training-qingcheng-jizhi-ustb-co-first-author-to-be-submitted-in-oct-2026",
+          title: 'MLSys 2027 submission in progress: heterogeneous-modeling Packing scheduling for general LLM training (Qingcheng...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "Training-framework contributions for the MetaX ecosystem (4k+ stars)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
