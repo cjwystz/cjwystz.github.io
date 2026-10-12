@@ -56,6 +56,11 @@ pagination:
   </div>
   {% endif %}
 
+<div class="mb-4 p-3 border rounded">
+  <h2 class="h5 mb-2"><a href="{{ '/blog/llm-foundations/' | relative_url }}">基础知识巩固</a></h2>
+  <p class="mb-0">从大模型结构到推理系统，一起看懂公式、张量形状与计算过程。每篇附具体算例和自测答案。</p>
+</div>
+
 {% assign featured_posts = site.posts | where: "featured", "true" %}
 {% if featured_posts.size > 0 %}
 <br>
