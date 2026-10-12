@@ -64,7 +64,18 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/https:/github.com/cjwystz";
           },
-        },{id: "post-910b3-推理研究的九条线索和实验结果",
+        },{id: "post-给-vllm-ascend-修一个-kv-缓存注册-bug-从-tensor-view-到真实-p-d-验证",
+        
+          title: "给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证",
+        
+        description: "记录 Mooncake V1 混合注意力注册路径的一个小修复：恢复底层存储地址、合并重叠区域，并用 CPU 回归与真实 Gemma 3 双卡 P/D 验证明确证据边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-ascend-mooncake-hybrid-registration/";
+          
+        },
+      },{id: "post-910b3-推理研究的九条线索和实验结果",
         
           title: "910B3 推理研究的九条线索和实验结果",
         

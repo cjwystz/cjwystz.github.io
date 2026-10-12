@@ -1,0 +1,307 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> 给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证 | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="记录 Mooncake V1 混合注意力注册路径的一个小修复：恢复底层存储地址、合并重叠区域，并用 CPU 回归与真实 Gemma 3 双卡 P/D 验证明确证据边界。"> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/vllm-ascend-mooncake-hybrid-registration/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证</h1> <p class="post-meta"> 发布于 2026 年 10 月 12 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/vllm-ascend"> <i class="fa-solid fa-hashtag fa-sm"></i> vllm-ascend</a>   <a href="/blog/tag/mooncake"> <i class="fa-solid fa-hashtag fa-sm"></i> mooncake</a>   <a href="/blog/tag/ascend-910b3"> <i class="fa-solid fa-hashtag fa-sm"></i> ascend-910b3</a>   <a href="/blog/tag/kv-cache"> <i class="fa-solid fa-hashtag fa-sm"></i> kv-cache</a>   <a href="/blog/tag/disaggregation"> <i class="fa-solid fa-hashtag fa-sm"></i> disaggregation</a>   <a href="/blog/tag/open-source"> <i class="fa-solid fa-hashtag fa-sm"></i> open-source</a>   ·   <a href="/blog/category/engineering"> <i class="fa-solid fa-tag fa-sm"></i> engineering</a>   <a href="/blog/category/llm-serving"> <i class="fa-solid fa-tag fa-sm"></i> llm-serving</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#%E4%B8%BA%E4%BB%80%E4%B9%88-tensor-%E5%9C%B0%E5%9D%80%E4%B8%8D%E7%AD%89%E4%BA%8E%E6%B3%A8%E5%86%8C%E5%9C%B0%E5%9D%80">为什么 tensor 地址不等于注册地址</a></li> <li class="toc-entry toc-h2"><a href="#%E4%BF%AE%E5%A4%8D%E7%9A%84%E6%98%AF%E5%93%AA%E6%9D%A1%E5%88%86%E6%94%AF">修复的是哪条分支</a></li> <li class="toc-entry toc-h2"><a href="#%E5%85%88%E8%AF%81%E6%98%8E%E6%97%A7%E5%AE%9E%E7%8E%B0%E4%BC%9A%E5%A4%B1%E8%B4%A5">先证明旧实现会失败</a></li> <li class="toc-entry toc-h2"><a href="#%E7%94%A8%E7%9C%9F%E5%AE%9E%E6%B7%B7%E5%90%88%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%A8%A1%E5%9E%8B%E8%B7%91-pd">用真实混合注意力模型跑 P/D</a></li> <li class="toc-entry toc-h2"><a href="#%E7%8E%AF%E5%A2%83%E9%97%AE%E9%A2%98%E4%B9%9F%E5%BF%85%E9%A1%BB%E7%95%99%E5%9C%A8%E8%AE%B0%E5%BD%95%E9%87%8C">环境问题也必须留在记录里</a></li> <li class="toc-entry toc-h2"><a href="#%E9%AA%8C%E8%AF%81%E8%BE%B9%E7%95%8C%E4%B8%8E%E5%AE%A1%E6%9F%A5%E7%8A%B6%E6%80%81">验证边界与审查状态</a></li> <li class="toc-entry toc-h2"><a href="#%E5%8F%82%E8%80%83">参考</a></li> </ul> </div> <hr> <div id="markdown-content"> <p>这次给 vLLM-Ascend 提交了一个范围很小的修复：<a href="https://github.com/vllm-project/vllm-ascend/pull/18355" rel="external nofollow noopener" target="_blank">PR #18355</a>。它处理 Mooncake V1 在混合注意力模型中注册 KV 缓存时的地址问题：逻辑 tensor view 的起点，不一定是底层内存应该注册的起点。</p> <p>生产代码的修改只有新增 4 行、删除 18 行，复用了仓库已有的存储感知注册函数。验证包括四个 CPU 回归用例，以及真实 Gemma 3 1B 的双卡 Prefill/Decode（P/D）功能测试。三个提示词下，P/D 生成的 token ID 都与直接生成一致。</p> <p>截至 2026 年 10 月 12 日，PR 已转为 Ready for review，并邀请维护者审查，<strong>尚未合并</strong>。本文记录修复和验证过程，不提出服务吞吐提升的结论。</p> <h2 id="为什么-tensor-地址不等于注册地址">为什么 tensor 地址不等于注册地址</h2> <p>P/D 分离把提示词计算放到 Prefill 实例，把后续生成放到 Decode 实例。Prefill 产生的 KV 缓存需要交给 Decode。使用 Mooncake 时，传输后端首先要注册能够访问的内存区域，再根据各层的地址、block 长度和 stride 传输数据。</p> <p>PyTorch 的 tensor 可以是底层 storage 的一个 view。假设有一块 8 MiB 的内存，起点已经满足 2 MiB 对齐，但某层的 view 从起点后 128 字节开始：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>底层内存： [base ................................ base + 8 MiB)
+层的 view：        [base + 128 .................. base + 8 MiB)
+</code></pre></div></div> <p><code class="language-plaintext highlighter-rouge">view.data_ptr()</code> 指向 <code class="language-plaintext highlighter-rouge">base + 128</code>。这个地址用于定位层的数据是正确的，但如果把它作为整个底层内存的注册起点，就会出现问题：它没有满足 2 MiB 对齐；从这个起点再注册完整的 8 MiB，还可能超出实际分配边界。</p> <p>另一种情况是两个缓存描述符共享同一块 storage。分别以各自 view 地址和描述符大小注册，可能产生重复或重叠范围。即使两个起点恰好都对齐，注册范围仍可能不正确。</p> <p>因此需要分别保存两类信息：<strong>底层内存的注册范围，以及各层数据的逻辑地址。</strong> 前者交给传输后端，后者用于计算具体要传输的数据位置。</p> <h2 id="修复的是哪条分支">修复的是哪条分支</h2> <p>问题位于 <code class="language-plaintext highlighter-rouge">mooncake_connector.py</code> 中的 <code class="language-plaintext highlighter-rouge">_get_registered_kv_tensor_buffers_hybrid()</code>。原来的实现收集各层 view 的地址，取最小值，再按描述符大小注册，并检查这个起点是否满足 2 MiB 对齐。</p> <p>仓库已经有 <code class="language-plaintext highlighter-rouge">_get_registered_kv_tensor_buffers()</code>，用于从真实 storage 恢复对齐起点、处理独立层内存，并合并重叠范围。这次让混合注意力分支复用它：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">_get_registered_kv_tensor_buffers_hybrid</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">kv_caches</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">self</span><span class="p">.</span><span class="nf">_get_registered_kv_tensor_buffers</span><span class="p">(</span><span class="n">kv_caches</span><span class="p">)</span>
+</code></pre></div></div> <p>上面省略了类型标注和解释性注释，核心行为就是这次委托调用。底层恢复和合并算法本来就存在，并非这个 PR 新实现的算法。</p> <p>在 <code class="language-plaintext highlighter-rouge">register_kv_caches()</code> 中，原有的选择顺序是：先处理 Mamba 组，再处理 <code class="language-plaintext highlighter-rouge">use_hybrid</code> 分支，最后处理普通注意力缓存。本次改变的是没有进入 Mamba 分支的混合注意力路径。各层的 <code class="language-plaintext highlighter-rouge">data_ptr()</code>、block 长度、stride 和 scale 仍由原来的元数据逻辑保存，不会因为注册范围合并而被替换成底层 storage 起点。</p> <p>可以直接对照<a href="https://github.com/vllm-project/vllm-ascend/blob/880f630e4fee7d2fe2a52423e3349a9b42f2d86f/vllm_ascend/distributed/kv_transfer/kv_p2p/mooncake_connector.py#L2583" rel="external nofollow noopener" target="_blank">生产代码</a>和 <a href="https://github.com/vllm-project/vllm-ascend/pull/18355/files" rel="external nofollow noopener" target="_blank">PR diff</a>。这个修改没有新增 API 或配置，也没有改变注意力计算或调度算法。</p> <h2 id="先证明旧实现会失败">先证明旧实现会失败</h2> <p>新增测试共四个执行用例，其中一个测试函数参数化为两个场景：</p> <table> <thead> <tr> <th>场景</th> <th>检查内容</th> </tr> </thead> <tbody> <tr> <td>view 从底层起点后 128 字节开始</td> <td>恢复对齐的底层起点，逻辑偏移保持不变</td> </tr> <tr> <td>两个描述符共享 storage，view 分别从起点和后 2 MiB 开始</td> <td>最终只注册一次实际底层范围</td> </tr> <tr> <td>一个描述符涉及两块独立层内存</td> <td>分别注册实际内存，不能误合成一块</td> </tr> <tr> <td>从 <code class="language-plaintext highlighter-rouge">register_kv_caches()</code> 入口注册</td> <td>后端收到底层范围，而层地址、block 长度和 stride 保持逻辑语义</td> </tr> </tbody> </table> <p>在未修改的 Ascend main 提交 <code class="language-plaintext highlighter-rouge">8c0667e52686602726e97972f9b19704d20d4411</code> 上，四个用例全部失败。应用补丁后，完整 Mooncake V1 单元测试文件的结果是：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>192 passed, 14 skipped
+</code></pre></div></div> <p>14 个跳过项是仓库原有的测试，没有为了让这个 PR 通过而新增跳过。这也意味着更广泛的物理存储注册问题还没有全部解决。</p> <p>CPU 测试使用真实 PyTorch storage 和指定版本的 vLLM Python 代码，加速器及平台启动边界使用仓库已有的 mock。入口测试也没有启动真实传输后端，因此它能验证地址与元数据契约，还需要真机测试补充运行证据。</p> <p>测试命令为：</p> <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>python <span class="nt">-m</span> pytest <span class="nt">-q</span> tests/ut/distributed/kv_transfer/kv_p2p/test_mooncake_connector.py
+</code></pre></div></div> <h2 id="用真实混合注意力模型跑-pd">用真实混合注意力模型跑 P/D</h2> <p>Qwen3.5 虽然也是混合架构，但带有 Mamba 类型缓存，会先进入另一条注册分支。为了覆盖本次修改，选择了 <strong>Gemma 3 1B IT</strong>：它同时使用滑动窗口注意力与全注意力，没有 Mamba 组。</p> <p>测试使用两张 Ascend 910B3，Prefill 和 Decode 各占一张卡，各自 TP=1。使用原始真实权重；下载文件按模型仓库提供的 SHA256 校验，没有裁剪层数或使用随机权重。</p> <p>主要配置如下：</p> <table> <thead> <tr> <th>项目</th> <th>配置</th> </tr> </thead> <tbody> <tr> <td>计算模式</td> <td>BF16、eager，关闭图编译</td> </tr> <tr> <td>随机种子与采样</td> <td>seed=42，temperature=0</td> </tr> <tr> <td>最大模型长度／批处理 token 数</td> <td>2048／2048</td> </tr> <tr> <td>block 大小</td> <td>128 token</td> </tr> <tr> <td>每个引擎的 KV 内存预算</td> <td>256 MiB</td> </tr> <tr> <td>前缀缓存</td> <td>关闭，避免本地缓存命中掩盖远程传输</td> </tr> <tr> <td>Connector</td> <td>MooncakeConnectorV1，分别配置 producer／consumer</td> </tr> </tbody> </table> <p>两个实例启动后，日志都记录了六个 <code class="language-plaintext highlighter-rouge">SlidingWindowSpec</code> 组和一个 <code class="language-plaintext highlighter-rouge">FullAttentionSpec</code> 组，并完成真实内存注册。组数由实际 KV 缓存分组产生，不等于注意力类型的数量。这与源码中的分支条件一起确认了混合注意力注册路径被执行。</p> <p>每个用例先在 Decode 实例上直接生成作为参考，再让 Prefill 计算提示词、返回远程 KV 元数据，最后由 Decode 读取这些 KV 并生成。比较的是生成的 <strong>token ID</strong>，同时检查实际传输日志，避免只看到 HTTP 返回成功就认为 P/D 已经生效。</p> <table> <thead> <tr> <th>提示词 token 数</th> <th>两种路径一致的生成 token 数</th> <th>成功 KV 传输量</th> </tr> </thead> <tbody> <tr> <td>6</td> <td>32</td> <td>3,407,872 字节（3.25 MiB）</td> </tr> <tr> <td>14</td> <td>32</td> <td>3,407,872 字节（3.25 MiB）</td> </tr> <tr> <td>1088</td> <td>32</td> <td>19,136,512 字节（18.25 MiB）</td> </tr> </tbody> </table> <p>三个用例全部通过。1088-token 的输入超过了模型 512-token 的滑动窗口。最终运行没有使用注册或传输 mock，日志记录了有实际长度的 Mooncake/HCCL 跨卡传输与完成事件。</p> <p>这些数据只用于证明功能和传输路径有效。小提示词也传输数 MiB，是因为检查的是按 block 和各层组织的实际 KV 范围，不能拿这张表推导传输效率或服务性能。</p> <h2 id="环境问题也必须留在记录里">环境问题也必须留在记录里</h2> <p>这次真机验证并不是第一次启动就成功。有几处失败来自测试环境搭建，不能把它们归因于 PR，也不能从报告里抹掉。</p> <p>首先，测试追踪代码在 Python 启动时过早导入模块，导致模型结构检查子进程异常退出。去掉追踪后，结构检查通过；最终测试使用未插入追踪的生产路径。</p> <p>其次，启动脚本曾覆盖镜像原有的 <code class="language-plaintext highlighter-rouge">PYTHONPATH</code>，让 worker 找不到 CANN 的 <code class="language-plaintext highlighter-rouge">acl</code> 模块。保留原有路径后解决。当前 worker 还需要仓库 CI 指定的 <code class="language-plaintext highlighter-rouge">fla_npu</code>，这项依赖安装在隔离环境中。</p> <p>更容易误判的是 <code class="language-plaintext highlighter-rouge">aclnnAddRmsNormBias</code>。加载模型后提示找不到这个算子接口，初步看起来像镜像不兼容。但继续检查发现：<strong>完整算子包本来就在镜像中，是搭建环境时只复用了扩展 <code class="language-plaintext highlighter-rouge">.so</code>，遗漏了配套 <code class="language-plaintext highlighter-rouge">_cann_ops_custom</code> 包及搜索路径。</strong> 补上 <code class="language-plaintext highlighter-rouge">ASCEND_CUSTOM_OPP_PATH</code> 和库路径后，真实 NPU 算子调用成功，无需重新下载或编译。</p> <p>最后，测试脚本为了限制等待时间，把 <code class="language-plaintext highlighter-rouge">HCCL_CONNECT_TIMEOUT</code> 设成了 60 秒。真实连接时 HCCL 明确报错，要求至少 120 秒。改回部署指南使用的连接超时 120 秒、执行超时 204 秒后，跨卡传输成功。</p> <p>这些调整都只发生在隔离测试环境，没有加入生产代码 diff，也没有通过 mock 或回退策略绕过传输失败。</p> <h2 id="验证边界与审查状态">验证边界与审查状态</h2> <p>Python 源码使用本 PR 的修改和仓库指定的 vLLM 提交 <code class="language-plaintext highlighter-rouge">ced6857afa0ea7b2e3f0846a62e1394e90f15607</code>。底层运行环境复用已有 <code class="language-plaintext highlighter-rouge">v0.26.0rc1</code> 镜像，包含 CANN 9.1、torch-npu 2.10 及完整原生算子包，没有重新构建当前 main 的全部原生组件。这个来源和限制已经写入 PR 说明。</p> <p>真实 P/D 测试证明了修改后的路径可以完成混合模型注册、跨卡传输和一致的生成，但<strong>没有在真实模型上做旧代码与新代码的成对 bug 复现</strong>。旧实现会失败的证据来自前面的四个 CPU 回归用例。也没有验证多节点、图模式、并发负载或性能提升。</p> <p>本 PR 与 <a href="https://github.com/vllm-project/vllm-ascend/issues/16632" rel="external nofollow noopener" target="_blank">issue #16632</a> 相关，但只处理剩余的 V1 混合注意力分支，没有声明关闭整个 issue。<a href="https://github.com/vllm-project/vllm-ascend/pull/16129" rel="external nofollow noopener" target="_blank">PR #16129</a> 修改的是相邻的 <code class="language-plaintext highlighter-rouge">mooncake_hybrid_connector.py</code>，本次修改的是 V1 的 <code class="language-plaintext highlighter-rouge">mooncake_connector.py</code>，两者范围不同。</p> <p>截至本文发布，pre-commit、DCO 和针对 verified vLLM main／v0.30.0 的两组 CPU UT 已通过。仓库的最终 CI gate 还要求维护者添加测试选择标签，安排精确测试或完整测试；因此不能把当前状态写成“所有合并检查已经通过”。</p> <p>PR 已进入审查阶段，已礼貌邀请代码负责人和相关维护者提供反馈。后续是否接受这条复用路径、还需要哪些验证，以维护者审查为准。测试完成后，使用的两张卡已释放，原始日志和失败记录保留用于复查。</p> <h2 id="参考">参考</h2> <ul> <li><a href="https://github.com/vllm-project/vllm-ascend/pull/18355" rel="external nofollow noopener" target="_blank">PR #18355：代码、测试与审查记录</a></li> <li><a href="https://docs.vllm.ai/projects/ascend/en/latest/developer_guide/contribution/index.html" rel="external nofollow noopener" target="_blank">vLLM-Ascend 贡献指南</a></li> <li><a href="https://docs.vllm.ai/projects/ascend/en/latest/developer_guide/contribution/testing.html" rel="external nofollow noopener" target="_blank">测试与 PR 精确测试说明</a></li> <li><a href="https://modelscope.cn/models/LLM-Research/gemma-3-1b-it" rel="external nofollow noopener" target="_blank">Gemma 3 1B IT 模型仓库</a></li> <li><a href="https://github.com/vllm-project/vllm/commit/ced6857afa0ea7b2e3f0846a62e1394e90f15607" rel="external nofollow noopener" target="_blank">本次使用的 verified vLLM 提交</a></li> </ul> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-research-screening/">910B3 推理研究的九条线索和实验结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-inference-audit-negative-results/">910B3 推理实验复核：从干扰微基准到完整模型的负结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-mechanism/">拆到算子看:910B3 上 prefill 和 decode 到底在争什么</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-disaggregation/">在 910B3 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/real-envelope-aigc-detection/">守真，而非逐假——AI 生成图像检测为什么总是慢半拍</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-first-agent-calibration/">跑满 4 小时、零交卷、reward 0.0——但这不是躺平</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-hard-task-no-oracle/">100 秒被秒杀之后：我们把 benchmark 升级成了"没人会做的题"</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/frontierswe-inference-task-anatomy/">解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/harbor-infra-benchmark-first-task/">把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/sglang-npu-moe-fp32-pr/">追一个静默精度 bug：我给 SGLang 提 PR 的完整记录</a> </li> </ul> </div> </div> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "publications by categories in reversed chronological order. generated by jekyll-scholar.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Edit the `_data/repositories.yml` and change the `github_users` and `github_repos` lists to include your own GitHub profile and repositories.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "This is a description of the page. You can modify it in &#39;_pages/cv.md&#39;. You can also change or remove the top pdf download button.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-给-vllm-ascend-修一个-kv-缓存注册-bug-从-tensor-view-到真实-p-d-验证",
+        
+          title: "给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证",
+        
+        description: "记录 Mooncake V1 混合注意力注册路径的一个小修复：恢复底层存储地址、合并重叠区域，并用 CPU 回归与真实 Gemma 3 双卡 P/D 验证明确证据边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-ascend-mooncake-hybrid-registration/";
+          
+        },
+      },{id: "post-910b3-推理研究的九条线索和实验结果",
+        
+          title: "910B3 推理研究的九条线索和实验结果",
+        
+        description: "汇总计算干扰、KV 入站、真实 PD、hybrid 缓存和多模态方向的调研与实验，并记录通信执行路径候选从微基准交叉点到完整 TP2 对照的筛选过程。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-research-screening/";
+          
+        },
+      },{id: "post-910b3-推理实验复核-从干扰微基准到完整模型的负结果",
+        
+          title: "910B3 推理实验复核：从干扰微基准到完整模型的负结果",
+        
+        description: "修正双 stream 计时、重放相同请求 trace、调优 SGLang 基线，并验证 vector attention 与 KV 接收。干扰存在，但微基准优势没有转化为 Qwen3 完整模型收益。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-inference-audit-negative-results/";
+          
+        },
+      },{id: "post-拆到算子看-910b3-上-prefill-和-decode-到底在争什么",
+        
+          title: "拆到算子看:910B3 上 prefill 和 decode 到底在争什么",
+        
+        description: "上一篇在 910B3 上测了 PD 分离的配比效果——3P:4D 吞吐反超一体化 11%,只给 1 张 prefill 卡会把 TTFT p99 打到 9 秒。但那些都是端到端数字,回答不了&quot;为什么&quot;。这篇往下拆一层:用昇腾 msprof 把 Cube/Vector/MTE 三类执行单元分开观测,给出 prefill 与 decode 资源争抢的硬件级证据——同一个 MatMul 算子,prefill 负载下 Cube 占用 0.92,decode 负载下只有 0.14,而搬数通道 MTE2 被打满到 0.99。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-mechanism/";
+          
+        },
+      },{id: "post-在-910b3-上把-llm-推理的-quot-前菜-quot-和-quot-主菜-quot-分开炒-pd-分离实测",
+        
+          title: "在 910B3 上把 LLM 推理的&quot;前菜&quot;和&quot;主菜&quot;分开炒——PD 分离实测",
+        
+        description: "在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B3 上做了真机 PD 的配比实验:7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-disaggregation/";
+          
+        },
+      },{id: "post-守真-而非逐假-ai-生成图像检测为什么总是慢半拍",
+        
+          title: "守真，而非逐假——AI 生成图像检测为什么总是慢半拍",
+        
+        description: "AI 生成图像检测的系统性困境：检测器永远追不上生成器的迭代。这篇博客聊聊这个领域走过的几条路（GAN 指纹、DIRE、UnivFD、latent blending），以及一个换方向的思路——与其学假图长什么样，不如给真实照片的分布修一圈围墙。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/real-envelope-aigc-detection/";
+          
+        },
+      },{id: "post-跑满-4-小时-零交卷-reward-0-0-但这不是躺平",
+        
+          title: "跑满 4 小时、零交卷、reward 0.0——但这不是躺平",
+        
+        description: "开放式性能题的第一次真实 agent 校准：DeepSeek-V4.1-Flash 驱动的 claude-code 在 4B FlagScale/沐曦题上 4 小时跑满、零交卷、reward 0.0——但 3079 条轨迹里是教科书级的双峰诊断、一次通信串行化的实锤，和 +47% 的真实吞吐提升。复盘两个坑（一个算我们的，一个算它的）、阈值决策，以及为什么 binary reward 会抹掉这次实验里最有价值的信息。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-first-agent-calibration/";
+          
+        },
+      },{id: "post-100-秒被秒杀之后-我们把-benchmark-升级成了-quot-没人会做的题-quot",
+        
+          title: "100 秒被秒杀之后：我们把 benchmark 升级成了&quot;没人会做的题&quot;",
+        
+        description: "国产 infra agentic benchmark 的第一次真机校准翻车实录——精心设计的 hard 题被当代模型 100 秒连过五次，复盘出&quot;好题的三条反例&quot;，然后转身做了一道连出题团队自己都没解出来的开放式性能题：32 卡国产 GPU 上把 27B 训练吞吐推过实测纪录。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-hard-task-no-oracle/";
+          
+        },
+      },{id: "post-解剖一道顶级-agentic-考题-frontierswe-推理优化题的设计艺术",
+        
+          title: "解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术",
+        
+        description: "逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/frontierswe-inference-task-anatomy/";
+          
+        },
+      },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-mlsys-2027-submission-in-progress-heterogeneous-modeling-packing-scheduling-for-general-llm-training-qingcheng-jizhi-ustb-co-first-author-to-be-submitted-in-oct-2026",
+          title: 'MLSys 2027 submission in progress: heterogeneous-modeling Packing scheduling for general LLM training (Qingcheng...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "Training-framework contributions for the MetaX ecosystem (4k+ stars)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
