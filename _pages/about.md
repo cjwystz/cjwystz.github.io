@@ -71,6 +71,6 @@ I am an **AI Infra researcher & engineer** focused on **large-model distributed 
 
 My hands-on experience spans **1000-GPU-scale training and inference across heterogeneous accelerators** — Huawei Ascend 910C, MetaX C550, and Ali Zhenwu 810E — alongside NVIDIA A800/A100 clusters. My research on heterogeneous-modeling Packing scheduling (MLSys 2027) delivers **+20% end-to-end training throughput**, and my work on formal-proof-guided geometric reasoning (TMLR 2027, under review) improves GRPO-trained reasoning by **+9.7%** on geometry and **+8.0%** on general math.
 
-My open-source work includes a **PEFT contribution in review**: I reported and reproduced a LoRA-FA optimizer closure bug, obtained maintainer approval, and submitted [PR #3966](https://github.com/huggingface/peft/pull/3966) with regression tests. The PR is not yet merged. [Technical write-up](/blog/2026/peft-lorafa-closure-grad/).
+I am an open-source contributor to **FlagOS** and **Hugging Face PEFT**, focusing on large-model training and inference systems.
 
 I am actively seeking a **PhD (2028–2029 Fall) in large-model systems** — distributed training/inference, memory & scheduling optimization, and embodied AI — and I am open to internships in foundation-model, AI-Infra and robotics teams.
