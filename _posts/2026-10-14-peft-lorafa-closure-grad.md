@@ -11,7 +11,7 @@ toc:
 
 这次向 Hugging Face PEFT 提交了 [issue #3958](https://github.com/huggingface/peft/issues/3958) 和 [PR #3966](https://github.com/huggingface/peft/pull/3966)。问题很具体：LoRA-FA 优化器声明支持 `step(closure)`，但执行 closure 时关闭了梯度记录，导致标准训练 closure 中的反向传播失败。
 
-**截至 2026 年 10 月 14 日本文发布前的检查，维护者已批准修复方案，PR 已提交、尚未合并，也尚无人工 review。** 本文记录一个优化器 API 正确性修复，不声称改善训练吞吐或模型效果。
+**更新于 2026 年 10 月 16 日：PR #3966 已于北京时间 16:26 合并，维护者审查批准，线上 CI 全部通过。** 本文记录一个优化器 API 正确性修复，不声称改善训练吞吐或模型效果。
 
 ## 基础知识：LoRA、LoRA-FA 与优化器
 
@@ -111,22 +111,47 @@ if closure is not None:
 
 保留外层 `@torch.no_grad()`：进入 closure 时开启梯度，离开后恢复，后续参数更新仍不记录计算图。这与 PyTorch AdamW 的处理方式一致。
 
-[提交 00eaedb](https://github.com/cjwystz/peft-chenjiawei/commit/00eaedb)修改两个文件：`src/peft/optimizers/lorafa.py` 和 `tests/test_lorafa.py`，共新增 48 行、删除 1 行，其中绝大部分是回归测试。
+最终版本修改两个文件：`src/peft/optimizers/lorafa.py` 和 `tests/test_lorafa.py`。生产代码仅增加 `torch.enable_grad()` 上下文，测试经过两轮维护者审查后收敛为一个最小回归用例。完整改动见 [已合并 PR](https://github.com/huggingface/peft/pull/3966/files)。
 
 ## 测试如何证明修复有效
 
-新增测试组合普通 LoRA / rsLoRA，以及普通调用 / 外层 `no_grad`，形成四个用例。每个用例连续执行三个优化步骤，并与完全相同初始权重、输入、损失函数、学习率和权重衰减的普通训练路径比较。
+最初使用普通 LoRA / rsLoRA、外层 `no_grad` 等组合，并比较多步参数更新。维护者指出，对这个梯度上下文错误，这些检查过于复杂。最终删除参考训练路径、多步比较、rsLoRA 和外层 `no_grad` 参数化，只保留普通 LoRA 的一次 closure 调用：
 
-检查不仅是“不再报错”，还包括：返回 loss 与参考一致；所有参数更新逐值一致；closure 每步调用一次；调用结束后梯度模式恢复；A 不产生梯度、权重不变；B 确实更新。
+```python
+def test_lorafa_step_with_closure():
+    torch.manual_seed(42)
+    model = get_peft_model(
+        torch.nn.Sequential(torch.nn.Linear(4, 4, bias=False)),
+        LoraConfig(target_modules=["0"], r=2, lora_alpha=4),
+    )
+    optimizer = create_lorafa_optimizer(model, r=2, lora_alpha=4, lr=0.001)
+    x = torch.ones(2, 4)
 
-| 检查                              | 结果                                        |
-| --------------------------------- | ------------------------------------------- |
-| 新增四个用例，未修复源码          | 4 失败，10 个已有测试未选择                 |
-| 修复后完整 `tests/test_lorafa.py` | 14 通过                                     |
-| `make quality`                    | lint、格式、文档样式与 API 文档覆盖检查通过 |
-| `git diff --check`                | 通过                                        |
+    def closure():
+        optimizer.zero_grad()
+        loss = model(x).square().mean()
+        loss.backward()
+        return loss
 
-新增四个用例使用 CPU；现有测试自动选择本机 Apple MPS。没有执行 CUDA/NPU、多机或完整大模型训练测试。对于这个 Python autograd 上下文错误，这些检查足以建立复现和小范围修复证据，但不代表全套硬件兼容性已经验证。
+    optimizer.step(closure)
+    grad = model.get_base_model()[0].lora_B["default"].weight.grad
+    assert grad is not None
+    assert torch.count_nonzero(grad) > 0
+```
+
+这里没有在 `backward()` 之前断言梯度模式，而是让未修复代码真正触发用户遇到的 RuntimeError；修复后再检查 B 的梯度非空且非零。测试针对具体故障，避免把无关行为绑定到回归测试中。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| 移除修复，运行单个回归测试 | 在 `loss.backward()` 触发原始 RuntimeError |
+| 修复后本地完整 `tests/test_lorafa.py` | 11 通过 |
+| 本地 `make quality` | 通过 |
+| 线上 Python 3.11–3.14 × Ubuntu / Windows | 8 项测试任务全部通过 |
+| 线上代码质量检查与文档构建 | 全部通过 |
+
+新增回归测试使用 CPU；本地已有测试自动选择 Apple MPS。没有执行 CUDA/NPU、多机或完整大模型训练测试，因此不把这次 API 正确性修复描述为全套硬件兼容性或性能验证。[线上测试记录](https://github.com/huggingface/peft/actions/runs/38537785692)。
+
+维护者 BenjaminBossan 于北京时间 10 月 16 日 14:14 [批准最终版本](https://github.com/huggingface/peft/pull/3966#pullrequestreview-5543749559)，表示 “Thanks for simplifying the test. LGTM.”；PR 随后于 16:26 合并。
 
 ## 开源流程与重叠 PR
 
@@ -136,10 +161,10 @@ if closure is not None:
 
 这里有一个需要如实记录的检查遗漏：另一位贡献者 YashwanthNomula 已于 10 月 13 日 22:19 提交 [PR #3959](https://github.com/huggingface/peft/pull/3959)，引用同一个 issue，采用相同修复思路。它在维护者批准前被机器人以“缺少已批准 issue”为由关闭，技术方案没有被人工否定。检查时只关注开放 PR，漏掉了这个关闭后仍可能重开的实现。
 
-截至本文发布前，#3959 关闭，#3966 开放。我的贡献包含先前的问题发现、可运行复现与 issue 报告，以及获批准后提交的修复和回归测试；另一位作者较早提交了修复 PR，不表示他较早发现或报告了问题。同时，不能因为机器人关闭就认为另一位作者放弃了。后续如有协调，以维护者决定为准。这提醒我：重复检查要包括关闭的 PR、issue 时间线和作者的接手声明。
+最初发布时，#3959 关闭，#3966 开放；10 月 16 日更新时，#3966 已合并。我的贡献包含先前的问题发现、可运行复现与 issue 报告，以及获批准后提交的修复和回归测试；另一位作者较早提交了修复 PR，不表示他较早发现或报告了问题。同时，不能因为机器人关闭就认为另一位作者放弃了。最终上游合并了 #3966。这提醒我：重复检查要包括关闭的 PR、issue 时间线和作者的接手声明。
 
 ## AI 协助与贡献状态
 
 OpenAI Codex / GPT 参与源码调查、复现、实现、测试执行和文稿整理，issue 与 PR 已披露 AI 协助。测试结果来自本地实际执行，不能用自动生成的文字替代验证。提交者仍需理解改动、检查每一行并能够回应审查；PEFT 明确要求人对 AI 辅助贡献负责。
 
-目前可准确表述为：**向 PEFT 报告并复现 LoRA-FA closure 错误，方案获维护者批准，提交修复和回归测试，PR 等待审查。** 合并之前，不写成“修复已进入 PEFT 主线”。
+目前可准确表述为：**Hugging Face PEFT 开源贡献者：发现并报告 LoRA-FA closure 梯度上下文错误，完成修复与回归测试，经维护者审查、线上 CI 验证后合并至上游。**
