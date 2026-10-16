@@ -1,18 +1,18 @@
 ---
 layout: page
 title: FlagOS / FlagScale
-description: Training-framework contributions for the MetaX ecosystem (4k+ stars)
+description: MetaX adaptation, memory optimization, and multimodal training
 img:
 importance: 1
 category: open-source
 ---
 
-Contributing to the FlagOS / FlagScale training framework for the MetaX (沐曦) ecosystem — bug fixes, hardware adaptation, and training-framework optimization methods for `te-fl`, `FlagScale`, and `Megatron-LM` integration.
+**FlagScale / Megatron-LM-FL / TransformerEngine-FL**: MetaX adaptation, training framework optimization, and bug fixes
 
-Highlights:
-
-- Method-level open-source contributions to the FlagScale stack (⭐ 4k+)
-- Hardware enablement and adaptation across the MetaX C550 accelerator
-- Hands-on validation at 1000-GPU training/inference scale
-
-Related: [FlagOpen/FlagScale on GitHub](https://github.com/FlagOpen/FlagScale)
+**TransformerEngine-FL**: TE 2.13+ package layout and loading-path adaptation ([PR #128](https://github.com/flagos-ai/TransformerEngine-FL/pull/128))<br>
+**FlagScale**: MetaX argument-check and profiler fixes ([PR #1296](https://github.com/flagos-ai/FlagScale/pull/1296))<br>
+**Megatron-LM-FL**: MetaX JIT/Dynamo memory-leak fix ([PR #185](https://github.com/flagos-ai/Megatron-LM-FL/pull/185))<br>
+**Chunk CE**: Chunked vocabulary-parallel cross-entropy to reduce temporary training memory ([PR #126](https://github.com/flagos-ai/Megatron-LM-FL/pull/126))<br>
+**TP overlap**: Communication–computation overlap adaptation and fixes on MetaX<br>
+**Multimodal packing**: Qwen3.5 Next Fit packing, multimodal alignment, and per-sample position encoding ([PR #1308](https://github.com/flagos-ai/FlagScale/pull/1308))<br>
+**TE data packing**: BFD / Next Fit algorithms

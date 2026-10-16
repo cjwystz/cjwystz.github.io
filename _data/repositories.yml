@@ -4,4 +4,7 @@ github_users:
 repo_description_lines_max: 2
 
 github_repos:
-  - FlagOpen/FlagScale
+  - flagos-ai/FlagScale
+  - flagos-ai/Megatron-LM-FL
+  - flagos-ai/TransformerEngine-FL
+  - huggingface/peft

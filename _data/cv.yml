@@ -4,7 +4,7 @@ cv:
   email: 2451427796@qq.com
   location: Beijing, China
   image: ""
-  summary: AI Infra researcher and engineer focused on large-model distributed training & inference, memory optimization and load scheduling. Open-source contributor to the FlagOS ecosystem with 1000-GPU-scale experience on heterogeneous accelerators. Seeking a PhD in large-model systems (2028-2029 Fall).
+  summary: AI Infra researcher and engineer focused on large-model distributed training & inference, memory optimization and load scheduling. Open-source contributor to FlagOS and Hugging Face PEFT with 1000-GPU-scale experience on heterogeneous accelerators. Seeking a PhD in large-model systems (2028-2029 Fall).
 
   social_networks:
     - network: GitHub
@@ -41,7 +41,7 @@ cv:
         summary: Contribute to the FlagOS / FlagScale training framework for the MetaX ecosystem — bug fixes, hardware adaptation and training-framework optimization.
         highlights:
           - "1000-GPU-scale training & inference on Huawei Ascend 910C, MetaX C550, Ali Zhenwu 810E"
-          - "Method-level open-source contributions to FlagScale (4k+ stars)"
+          - "FlagScale / Megatron-LM-FL / TransformerEngine-FL: MetaX adaptation and training optimization"
 
       - company: FlagOS Open Source Community
         position: Contributor
@@ -50,7 +50,18 @@ cv:
         end_date: present
         summary: Contributions to the FlagOS training stack (te-fl, FlagScale, Megatron-LM adaptations).
         highlights:
-          - "zkLLM: LLM zero-knowledge proof visualization system — National Software Copyright 2025SR0617553"
+          - "[TE package adaptation #128](https://github.com/flagos-ai/TransformerEngine-FL/pull/128) / [FlagScale MetaX fixes #1296](https://github.com/flagos-ai/FlagScale/pull/1296)"
+          - "[JIT memory fix #185](https://github.com/flagos-ai/Megatron-LM-FL/pull/185) / [Chunk CE #126](https://github.com/flagos-ai/Megatron-LM-FL/pull/126)"
+          - "[Qwen3.5 multimodal packing #1308](https://github.com/flagos-ai/FlagScale/pull/1308) / MetaX TP overlap adaptation"
+
+      - company: Hugging Face PEFT
+        position: Open-source Contributor
+        location: Remote
+        start_date: 2026-10
+        end_date: present
+        summary: LoRA-FA optimizer closure gradient-context fix and regression test
+        highlights:
+          - "[PR #3966](https://github.com/huggingface/peft/pull/3966) / [Technical write-up](https://cjwystz.github.io/blog/2026/peft-lorafa-closure-grad/)"
 
     Publications:
       - title: Heterogeneous-modeling Packing Scheduling for General LLM Training
