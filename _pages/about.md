@@ -74,3 +74,20 @@ My hands-on experience spans **1000-GPU-scale training and inference across hete
 I am an open-source contributor to **FlagOS** and **Hugging Face PEFT**, focusing on large-model training and inference systems.
 
 I am actively seeking a **PhD (2028–2029 Fall) in large-model systems** — distributed training/inference, memory & scheduling optimization, and embodied AI — and I am open to internships in foundation-model, AI-Infra and robotics teams.
+
+
+### Open-source contributions
+
+**[FlagOS](https://github.com/flagos-ai/FlagScale)** — MetaX adaptation, training framework optimization, and bug fixes across FlagScale / Megatron-LM-FL / TransformerEngine-FL
+
+**TransformerEngine-FL**: MetaX TE 2.13+ package layout and loading-path adaptation ([PR #128](https://github.com/flagos-ai/TransformerEngine-FL/pull/128))<br>
+**FlagScale**: MetaX argument-check and profiler fixes ([PR #1296](https://github.com/flagos-ai/FlagScale/pull/1296))<br>
+**Megatron-LM-FL**: MetaX JIT/Dynamo memory-leak fix ([PR #185](https://github.com/flagos-ai/Megatron-LM-FL/pull/185))<br>
+**Chunk CE**: Chunked vocabulary-parallel cross-entropy to reduce temporary training memory ([PR #126](https://github.com/flagos-ai/Megatron-LM-FL/pull/126))<br>
+**TP overlap**: Communication–computation overlap adaptation and fixes on MetaX<br>
+**FlagScale multimodal packing**: Qwen3.5 Next Fit packing, multimodal alignment, and per-sample position encoding ([PR #1308](https://github.com/flagos-ai/FlagScale/pull/1308))<br>
+**TE multimodal data packing**: BFD (Best Fit Decreasing) / Next Fit algorithms
+
+**[Hugging Face](https://github.com/huggingface/peft)**
+
+**PEFT / LoRA-FA**: Optimizer `step(closure)` gradient-context fix and regression test ([PR #3966](https://github.com/huggingface/peft/pull/3966))
