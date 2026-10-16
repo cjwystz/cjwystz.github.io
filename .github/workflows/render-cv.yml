@@ -6,6 +6,7 @@ on:
       - master
     paths:
       - "_data/cv.yml"
+      - "bin/prepare_rendercv.py"
       - "assets/rendercv/design.yaml"
       - "assets/rendercv/locale.yaml"
       - "assets/rendercv/settings.yaml"
@@ -27,7 +28,8 @@ jobs:
           pip install -r requirements.txt
       - name: RenderCV
         run: |
-          cv_file=$(find _data  -maxdepth 1 -type f \( -name "cv.yaml" -o -name "cv.yml" \))
+          python bin/prepare_rendercv.py
+          cv_file=_data/rendercv-input.yaml
           if [ -z "$cv_file" ]; then
             echo "No cv.yml file found!"
             exit 1
@@ -44,6 +46,7 @@ jobs:
           fi
           rendercv render $cv_file --settings $settings
           rm assets/rendercv/rendercv_output/*.typ
+          rm _data/rendercv-input.yaml
       - name: Upload rendercv_output as an artifact
         uses: actions/upload-artifact@v4
         with:
@@ -53,6 +56,6 @@ jobs:
         run: |
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-          git add -A
+          git add assets/rendercv/rendercv_output
           git commit -m "chore: render the latest CV"
           git push
