@@ -13,6 +13,6 @@ category: open-source
 **FlagScale**: MetaX argument-check and profiler fixes ([PR #1296](https://github.com/flagos-ai/FlagScale/pull/1296))<br>
 **Megatron-LM-FL**: MetaX JIT/Dynamo memory-leak fix ([PR #185](https://github.com/flagos-ai/Megatron-LM-FL/pull/185))<br>
 **Chunk CE**: Chunked vocabulary-parallel cross-entropy to reduce temporary training memory ([PR #126](https://github.com/flagos-ai/Megatron-LM-FL/pull/126))<br>
-**TP overlap**: Communication–computation overlap adaptation and fixes on MetaX<br>
+**TP overlap**: Communication–computation overlap adaptation and fixes on MetaX ([PR #139](https://github.com/flagos-ai/TransformerEngine-FL/pull/139))<br>
 **Multimodal packing**: Qwen3.5 Next Fit packing, multimodal alignment, and per-sample position encoding ([PR #1308](https://github.com/flagos-ai/FlagScale/pull/1308))<br>
 **TE data packing**: BFD / Next Fit algorithms
