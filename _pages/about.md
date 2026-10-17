@@ -85,7 +85,7 @@ I am actively seeking a **PhD (2028–2029 Fall) in large-model systems** — di
 **Megatron-LM-FL**: MetaX JIT/Dynamo memory-leak fix ([PR #185](https://github.com/flagos-ai/Megatron-LM-FL/pull/185))<br>
 **Chunk CE**: Chunked vocabulary-parallel cross-entropy to reduce temporary training memory ([PR #126](https://github.com/flagos-ai/Megatron-LM-FL/pull/126))<br>
 **TP overlap**: Communication–computation overlap adaptation and fixes on MetaX ([PR #139](https://github.com/flagos-ai/TransformerEngine-FL/pull/139))<br>
-**FlagScale multimodal packing**: BFD / Next Fit packing algorithms; Qwen3.5 Next Fit with multimodal alignment and per-sample position encoding ([PR #1308](https://github.com/flagos-ai/FlagScale/pull/1308) · [implementation branch](https://github.com/flagos-ai/FlagScale/compare/main...Baibaione:FlagScale-qc-training:fix-mllm-packing))<br>
+**FlagScale multimodal packing**: BFD / Next Fit packing algorithms; Qwen3.5 Next Fit with multimodal alignment and per-sample position encoding ([PR #1308](https://github.com/flagos-ai/FlagScale/pull/1308))<br>
 
 **[Hugging Face](https://github.com/huggingface/peft)**
 
