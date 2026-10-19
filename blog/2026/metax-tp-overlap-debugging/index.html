@@ -1,0 +1,358 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> MetaX TP overlap 排查记录：接口跑通之后，为什么 GEMM 反而变慢？ | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="从能力查询、原生枚举和 Userbuffer 接口兼容，到 UB 分配消融与 TP4 真实训练短测，记录问题、修复及性能验证边界。"> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/metax-tp-overlap-debugging/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">MetaX TP overlap 排查记录：接口跑通之后，为什么 GEMM 反而变慢？</h1> <p class="post-meta"> 发布于 2026 年 10 月 19 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/metax"> <i class="fa-solid fa-hashtag fa-sm"></i> metax</a>   <a href="/blog/tag/tensor-parallel"> <i class="fa-solid fa-hashtag fa-sm"></i> tensor-parallel</a>   <a href="/blog/tag/transformer-engine"> <i class="fa-solid fa-hashtag fa-sm"></i> transformer-engine</a>   <a href="/blog/tag/profiling"> <i class="fa-solid fa-hashtag fa-sm"></i> profiling</a>   <a href="/blog/tag/memory"> <i class="fa-solid fa-hashtag fa-sm"></i> memory</a>   <a href="/blog/tag/open-source"> <i class="fa-solid fa-hashtag fa-sm"></i> open-source</a>   ·   <a href="/blog/category/engineering"> <i class="fa-solid fa-tag fa-sm"></i> engineering</a>   <a href="/blog/category/llm-training"> <i class="fa-solid fa-tag fa-sm"></i> llm-training</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86tp-overlap-%E6%83%B3%E9%9A%90%E8%97%8F%E4%BB%80%E4%B9%88%E5%BC%80%E9%94%80">基础知识：TP overlap 想隐藏什么开销</a></li> <li class="toc-entry toc-h2"> <a href="#%E7%AC%AC%E4%B8%80%E5%B1%82%E9%97%AE%E9%A2%98%E5%89%8D%E7%AB%AF%E4%B8%8E%E5%8E%9F%E7%94%9F%E6%89%A9%E5%B1%95%E7%9A%84%E6%8E%A5%E5%8F%A3%E6%B2%A1%E6%9C%89%E5%AE%8C%E5%85%A8%E5%AF%B9%E9%BD%90">第一层问题：前端与原生扩展的接口没有完全对齐</a> <ul> <li class="toc-entry toc-h3"><a href="#1-%E8%83%BD%E5%8A%9B%E6%9F%A5%E8%AF%A2%E9%9C%80%E8%A6%81%E7%9C%9F%E6%AD%A3%E5%88%B0%E8%BE%BE-metax-%E5%90%8E%E7%AB%AF">1. 能力查询需要真正到达 MetaX 后端</a></li> <li class="toc-entry toc-h3"><a href="#2-%E7%9B%B8%E5%90%8C%E6%9E%9A%E4%B8%BE%E5%80%BC%E4%B8%8D%E4%BB%A3%E8%A1%A8%E7%9B%B8%E5%90%8C%E5%8E%9F%E7%94%9F%E7%B1%BB%E5%9E%8B">2. 相同枚举值，不代表相同原生类型</a></li> <li class="toc-entry toc-h3"><a href="#3-%E4%B8%BA%E6%97%A7%E7%89%88-userbuffer-%E8%A1%A5%E6%8E%A5%E5%8F%A3%E5%90%8C%E6%97%B6%E4%BF%9D%E7%95%99%E5%8E%9F%E7%94%9F%E5%AF%B9%E8%B1%A1%E8%BA%AB%E4%BB%BD">3. 为旧版 Userbuffer 补接口，同时保留原生对象身份</a></li> <li class="toc-entry toc-h3"><a href="#4-%E5%8E%9F%E7%94%9F%E6%A8%A1%E5%9D%97%E5%8A%A0%E8%BD%BD%E5%90%8E%E8%A6%81%E6%81%A2%E5%A4%8D%E5%89%8D%E7%AB%AF%E5%8D%A0%E7%94%A8%E7%9A%84%E6%A8%A1%E5%9D%97%E5%88%AB%E5%90%8D">4. 原生模块加载后，要恢复前端占用的模块别名</a></li> </ul> </li> <li class="toc-entry toc-h2"><a href="#%E7%AC%AC%E4%BA%8C%E5%B1%82%E9%97%AE%E9%A2%98allgather-%E7%BB%93%E6%9D%9F%E4%BA%86wgrad-gemm-%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BB%8D%E7%84%B6%E6%85%A2">第二层问题：AllGather 结束了，Wgrad GEMM 为什么仍然慢</a></li> <li class="toc-entry toc-h2"><a href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%85%88%E7%94%A8%E8%BF%9B%E7%A8%8B%E5%86%85%E6%8B%A6%E6%88%AA%E5%99%A8%E9%AA%8C%E8%AF%81">为什么先用进程内拦截器验证</a></li> <li class="toc-entry toc-h2"><a href="#%E6%9C%80%E6%96%B0-tp4-%E8%AE%AD%E7%BB%83%E7%9F%AD%E6%B5%8B%E5%B0%8F%E5%B9%85%E6%94%B6%E7%9B%8A%E4%BD%86%E5%AF%B9%E6%9A%96%E6%9C%BA%E7%AA%97%E5%8F%A3%E6%95%8F%E6%84%9F">最新 TP4 训练短测：小幅收益，但对暖机窗口敏感</a></li> <li class="toc-entry toc-h2"><a href="#%E5%93%AA%E4%BA%9B%E5%B7%B2%E7%BB%8F%E6%8F%90%E4%BA%A4%E5%93%AA%E4%BA%9B%E4%BB%8D%E6%98%AF%E5%AE%9E%E9%AA%8C%E6%9D%90%E6%96%99">哪些已经提交，哪些仍是实验材料</a></li> <li class="toc-entry toc-h2"><a href="#%E8%BF%99%E6%AC%A1%E6%8E%92%E6%9F%A5%E4%B8%AD%E6%9C%80%E6%9C%89%E7%94%A8%E7%9A%84%E4%B9%A0%E6%83%AF">这次排查中最有用的习惯</a></li> </ul> </div> <hr> <div id="markdown-content"> <p>这几天我们在 MetaX 上排查了 TP 通信计算重叠（TP overlap）。工作分成两部分：先解决 TransformerEngine-FL 前端与旧版 MetaX 原生扩展的接口兼容问题，再解释为什么接口跑通后，部分权重梯度矩阵乘法仍然偏慢。</p> <p>截至 2026 年 10 月 19 日，<a href="https://github.com/flagos-ai/TransformerEngine-FL/pull/139" rel="external nofollow noopener" target="_blank">TransformerEngine-FL PR #139</a> 已提交，仍开放、尚未合并。该 PR 只包含兼容性源码和回归测试。本文还记录了一套独立的 UB 分配实验及其训练短测，它不包含在当前 PR 中。</p> <p>核心结果是：<strong>目标 UB 分配从 Uncache 改为 Global 后，隔离实验里的 Wgrad GEMM 耗时从约 10.6 ms 恢复到约 5.8 ms；单节点 TP4 训练短测观察到小幅收益，但四节点 27B 尚无可确认的净收益。</strong> 算子耗时、训练吞吐与上游修复范围需要分别解释。</p> <h2 id="基础知识tp-overlap-想隐藏什么开销">基础知识：TP overlap 想隐藏什么开销</h2> <p>张量并行（TP）把一个大矩阵运算拆到多张卡上。计算被拆开后，部分算子需要拿到其他 rank 的激活，或把各 rank 的计算结果汇总。常见通信包括 AllGather（AG）与 ReduceScatter（RS）。</p> <p>以需要完整输入的线性层为例，可以先把各 rank 的输入片段收集起来，再执行矩阵乘法。最直接的执行顺序是：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>等待 AllGather 全部完成 → 执行 GEMM
+</code></pre></div></div> <p>如果算子和通信接口允许分块，就有机会让“后续输入分块的通信”与“已就绪分块的计算”同时进行。用理想化模型表示：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>串行耗时 ≈ T_comm + T_compute
+理想重叠耗时 ≈ max(T_comm, T_compute) + 调度与同步开销
+</code></pre></div></div> <p>这个式子只帮助理解上限。真实系统还要考虑分块是否足够大、依赖是否满足、通信与计算是否争用资源，以及数据进入 GEMM 的内存路径是否发生变化。</p> <p>在这条执行路径中，<strong>Userbuffer（UB）是原生 overlap 实现使用的通信缓冲区及其管理对象</strong>。它不能简单等同于一个普通 PyTorch Tensor：其对象类型、分配方式、同步和底层 GEMM 接口都可能有额外约束。</p> <p>反向传播中的权重梯度通常可写成：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Y = XW
+ dW = Xᵀ · dY
+</code></pre></div></div> <p>这里将样本和序列维合并，省略 TP 分片和布局变换。它说明一个容易忽略的点：<strong>即使矩阵形状、数值与 GEMM 实现相同，X 来自哪条分配路径，也可能影响这次计算。</strong> 是否真的影响，需要控制变量证明。</p> <h2 id="第一层问题前端与原生扩展的接口没有完全对齐">第一层问题：前端与原生扩展的接口没有完全对齐</h2> <p>我们使用的前端路径与已测试的旧版 MetaX TE 扩展，在能力查询、枚举和 UB 对象接口上存在差异。不能因为接口名字相近，就默认二者兼容。</p> <h3 id="1-能力查询需要真正到达-metax-后端">1. 能力查询需要真正到达 MetaX 后端</h3> <p>前端会查询 multicast 支持、原生 UB 是否使用 MPI 构建，以及 stream 优先级范围。修复补齐了三项查询的后端转发和注册：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">device_supports_multicast</span>
+<span class="n">ubuf_built_with_mpi</span>
+<span class="n">get_stream_priority_range</span>
+</code></pre></div></div> <p>新增注册同时检查 <strong>MACA 运行时标识与后端可用性</strong>。这避免普通 PyTorch 或其他厂商环境误选 MetaX 实现。这里做的是能力查询的接线，不能把“查询已注册”写成“所有能力都受支持”。</p> <h3 id="2-相同枚举值不代表相同原生类型">2. 相同枚举值，不代表相同原生类型</h3> <p>前端 overlap 枚举和扩展中的 <code class="language-plaintext highlighter-rouge">CommOverlapType</code> 可能属于不同类型。原生绑定接受参数时，光有相同整数值未必足够。</p> <p>修复在调用原生构造函数前显式转换：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">comm_type</span> <span class="o">=</span> <span class="n">tex</span><span class="p">.</span><span class="nc">CommOverlapType</span><span class="p">(</span><span class="nf">int</span><span class="p">(</span><span class="n">comm_type</span><span class="p">))</span>
+</code></pre></div></div> <p>这样送到原生接口的是它自己定义的枚举。兼容层负责转换，避免让上层调用者了解扩展版本差异。</p> <h3 id="3-为旧版-userbuffer-补接口同时保留原生对象身份">3. 为旧版 Userbuffer 补接口，同时保留原生对象身份</h3> <p>前端需要 <code class="language-plaintext highlighter-rouge">with_cublasmp()</code> 查询，而已测试的旧版 UB 类没有这个方法。MetaX 路径也没有实现这里的 cuBLASMp 功能，因此缺失时补充 <code class="language-plaintext highlighter-rouge">False</code>。</p> <p>实现没有把原生对象包成任意 Python 代理，而是采用原生类的 Python 子类：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">LegacyUserbuffer</span><span class="p">(</span><span class="n">native_type</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">with_cublasmp</span><span class="p">(</span><span class="n">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">False</span>
+</code></pre></div></div> <p>这是实现思路节选。实际代码会先检查原生类是否已有该方法：已有就直接使用，并缓存兼容子类。</p> <p>保留原生类型关系，是为了满足下游 GEMM 对原生绑定对象的要求。<strong>补齐方法只是表层目标，不能因此破坏后续接口的类型兼容性。</strong> 同时，显式请求不支持的 cuBLASMp overlap 仍会被拒绝。</p> <h3 id="4-原生模块加载后要恢复前端占用的模块别名">4. 原生模块加载后，要恢复前端占用的模块别名</h3> <p>另一处前置问题来自 <code class="language-plaintext highlighter-rouge">sys.modules["transformer_engine_torch"]</code>。前端 dispatcher 与厂商扩展的加载需要协调这个名称。</p> <p>旧逻辑只有在扩展加载时自行注册了该名称，才恢复原来的对象。但在已测试的不同构建中，自注册行为不同：torch 2.8 构建会注册，torch 2.10 构建不会。因此“旧构建正常”没有证明恢复逻辑完整。</p> <p>修复在 <code class="language-plaintext highlighter-rouge">finally</code> 中按加载前状态恢复，覆盖成功与异常路径：</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="n">saved_owner</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+    <span class="n">sys</span><span class="p">.</span><span class="n">modules</span><span class="p">[</span><span class="sh">"</span><span class="s">transformer_engine_torch</span><span class="sh">"</span><span class="p">]</span> <span class="o">=</span> <span class="n">saved_owner</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">sys</span><span class="p">.</span><span class="n">modules</span><span class="p">.</span><span class="nf">pop</span><span class="p">(</span><span class="sh">"</span><span class="s">transformer_engine_torch</span><span class="sh">"</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+</code></pre></div></div> <p>PR #139 包含 <a href="https://github.com/flagos-ai/TransformerEngine-FL/pull/135" rel="external nofollow noopener" target="_blank">#135</a> 的这项前置修复，不用于关闭或替代 #135。上述源码与回归测试见 <a href="https://github.com/flagos-ai/TransformerEngine-FL/pull/139/files" rel="external nofollow noopener" target="_blank">#139 完整改动</a>。</p> <h2 id="第二层问题allgather-结束了wgrad-gemm-为什么仍然慢">第二层问题：AllGather 结束了，Wgrad GEMM 为什么仍然慢</h2> <p>接口跑通之后，排查重心转向性能。最初容易想到的解释是：通信和计算同时执行，争用了资源，所以 GEMM 变慢。</p> <p>但前期隔离实验发现：<strong>即使先等 AllGather 完成，再让部分 Wgrad GEMM 读取目标 UB 输入，耗时仍然偏高。</strong> 这说明“正在通信时的资源竞争”不能单独解释该现象。</p> <p>我们对比了三条输入路径：</p> <table> <thead> <tr> <th>前期隔离对照</th> <th>所测 GEMM 耗时</th> <th>解释边界</th> </tr> </thead> <tbody> <tr> <td>直接读取目标 UB 输入</td> <td>约 10.6 ms</td> <td>目标路径上的异常耗时</td> </tr> <tr> <td>复制到普通显存后再计算</td> <td>约 5.7 ms</td> <td> <strong>不含复制成本</strong>，不能直接当作训练优化收益</td> </tr> <tr> <td>目标分配改为 Global，不加输入 copy</td> <td>约 5.8 ms</td> <td>支持分配路径是重要影响因素</td> </tr> </tbody> </table> <p>复制实验的用途是诊断：在数值和后续计算相同的情况下，更换输入存储路径能否改变结果。它不是免费优化，因为 copy 也消耗时间、带宽和显存。</p> <p>进一步检查发现，在所排查的原生库版本中，目标分配携带 Uncache 标志。将该分配的 flags 从 <strong>5 改为 1（Global）</strong> 后，无需额外输入 copy，GEMM 耗时也恢复了。</p> <p>这些结果支持继续检查分配策略，但还不能断言某一级 cache 或某个底层物理机制已被完全定位。<strong>Uncache / Global 是这里的分配标志；从名称直接推导硬件行为，仍然缺少证据。</strong> 表中是前期消融记录，不是后面训练短测重新采集的 profiling。</p> <h2 id="为什么先用进程内拦截器验证">为什么先用进程内拦截器验证</h2> <p>当时没有拿到与安装版本匹配的 MetaX 原生分配源码，也没有找到直接设置目标策略的公开接口。为了先回答“改变分配策略是否有用”，我们做了一个可选的 C 动态库拦截器。</p> <p>它只在自有训练进程中识别特定 UB 数据缓冲的分配，把目标参数从 Uncache 改为 Global，再交给原来的 MetaX 分配函数。Python 工具负责构建、启动和检查。</p> <p>这套实验方案的范围很窄：</p> <ul> <li>没有修改磁盘上的共享库文件，也没有额外复制输入</li> <li>工具默认关闭，依赖特定原生库版本与调用位置</li> <li>目标数据缓冲与控制分配需要分别审计，不能把所有分配一律改成 Global</li> <li>完整 <code class="language-plaintext highlighter-rouge">guard.py run</code> GPU 包装尚未验证；真实 GPU 短测使用构建工具加独立实验 launcher</li> </ul> <p>它适合验证假设，还不能代替正式的后端接口。长期更合理的方式，是由原生库提供受支持的 UB 分配策略入口，并明确适用条件。</p> <h2 id="最新-tp4-训练短测小幅收益但对暖机窗口敏感">最新 TP4 训练短测：小幅收益，但对暖机窗口敏感</h2> <p>算子耗时恢复后，还需要回到训练。GEMM 快了，不代表每一步训练都按相同比例变快。</p> <p>这轮单节点实验的共同设置为 <strong>4 卡、4B 模型、TP4/PP1/DP1、seq2048、GBS16、MBS1、BF16、seed42</strong>。模型、数据及其他训练控制保持一致，按 <strong>ON → OFF → ON</strong> 顺序分别运行 10 步。</p> <p>ON 使用 Global 分配实验方案，保留前向 AG overlap，关闭 <code class="language-plaintext highlighter-rouge">bulk_dgrad</code>、<code class="language-plaintext highlighter-rouge">bulk_wgrad</code> 和 RS overlap。OFF 关闭 TP overlap。三组都不额外加入输入 copy、profiler 或 checkpoint 保存。</p> <table> <thead> <tr> <th>配置</th> <th>第 3–10 步平均耗时</th> </tr> </thead> <tbody> <tr> <td>ON A</td> <td>7.179 秒/步</td> </tr> <tr> <td>OFF</td> <td>7.374 秒/步</td> </tr> <tr> <td>ON B</td> <td>7.212 秒/步</td> </tr> </tbody> </table> <p>两次 ON 合并后的平均值是 <strong>7.19536875 秒/步</strong>。在每步工作量相同的条件下：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>吞吐提升 = T_OFF / T_ON − 1
+         = 7.3740875 / 7.19536875 − 1
+         ≈ 2.48%
+</code></pre></div></div> <p>对应的平均单步时间下降约 <strong>2.42%</strong>，两个百分比的分母不同，不能混用。</p> <p>三组统一改看第 <strong>4–10 步</strong>时，吞吐差变成约 <strong>1.31%</strong>。因此目前更稳妥的结论是“短测观察到小幅收益，且对暖机窗口敏感”，尚不足以证明稳定长期收益。ON 同时改变了 overlap 和分配策略，也不能将全部训练收益单独归因于 Global。</p> <p>三组共 30 步正常结束，NaN/skipped 为 0。ON 的 4 个 rank 都记录到真实原生 UB AG 调用，OFF 的 UB 调用为 0，交付源码哈希保持不变。但<strong>进入 overlap 调用路径，不等于本轮已经用时间线证明通信与计算实际重叠</strong>；这轮没有启用 profiler。有限 loss 与无 NaN 也不能替代完整梯度数值对照。</p> <p>四节点 27B 的此前短测与历史基线差异不足 1%，暂时没有可确认的净收益。模型规模、并行拓扑和瓶颈都会变化，不能把单节点结果直接推广过去。</p> <h2 id="哪些已经提交哪些仍是实验材料">哪些已经提交，哪些仍是实验材料</h2> <table> <thead> <tr> <th>范围</th> <th>证据与状态</th> </tr> </thead> <tbody> <tr> <td>线上 PR #139</td> <td>两个 MetaX 后端源码文件、两个回归测试文件；当前未合并</td> </tr> <tr> <td>PR 兼容性测试</td> <td>普通 PyTorch 2.8.0 与 MACA PyTorch 2.10.0 / MACA 3.8.1.0 下分别 18/18 通过，pre-commit 通过；单元测试未暴露 GPU</td> </tr> <tr> <td>本地可选 Global 工具包</td> <td>在兼容性源码与测试之外增加 10 个工具及说明文件；不在当前线上 PR 中</td> </tr> <tr> <td>本地组合候选包验证</td> <td>18 项兼容性/导入测试与 10 项工具测试，共 28 项 CPU 回归通过，Linux C 构建及补丁应用检查通过</td> </tr> <tr> <td>GPU 证据</td> <td>前期 TP2/TP4 数值与 profiling 检查，以及上述最终候选的单节点 TP4 短测；不等于最终组合包已完整覆盖全部场景</td> </tr> </tbody> </table> <p>10 月 16 日简版材料曾将 14 文件组合包列为“准备提交”的范围；本文按当前线上 PR 校正状态，避免把准备好的实验工具误写成已经提交上游的实现。</p> <p>下一步仍需补齐最终候选的 TP2、多节点、严格 <code class="language-plaintext highlighter-rouge">dX/dW/dGamma/mainGrad</code> 数值对照与长期稳定性。整个仓库测试套件、NVIDIA 及其他平台硬件回归也尚未完成。</p> <h2 id="这次排查中最有用的习惯">这次排查中最有用的习惯</h2> <p><strong>先把接口正确性和性能拆开。</strong> 能创建 UB 对象，只证明兼容性的一部分；是否真正进入原生执行路径、结果是否正确、训练是否更快，需要独立证据。</p> <p><strong>把通信完成作为一个控制条件。</strong> 等 AG 完成后性能问题仍在，就需要继续查输入存储、布局与分配路径，而不是把全部异常都归结为 overlap 资源竞争。</p> <p><strong>回到固定工作量的训练比较。</strong> copy 后 GEMM 更快、某个算子恢复到 5.8 ms，都不能直接换算成端到端收益。训练短测还要检查暖机敏感性、路径是否生效以及跨规模是否成立。</p> <p>本文依据 10 月 16 日简版说明、候选包测试记录和当前 PR 整理。OpenAI Codex 协助核对源码、整理证据与撰写；没有为这篇文章重新启动 GPU 实验。</p> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/peft-lorafa-closure-grad/">给 PEFT 修一个 LoRA-FA 优化器接口：closure 为什么不能 backward？</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/llm-foundations-01-architecture-to-inference/">基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/vllm-ascend-mooncake-hybrid-registration/">给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-research-screening/">910B3 推理研究的九条线索和实验结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-inference-audit-negative-results/">910B3 推理实验复核：从干扰微基准到完整模型的负结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-mechanism/">拆到算子看:910B3 上 prefill 和 decode 到底在争什么</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-disaggregation/">在 910B3 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/real-envelope-aigc-detection/">守真，而非逐假——AI 生成图像检测为什么总是慢半拍</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-first-agent-calibration/">跑满 4 小时、零交卷、reward 0.0——但这不是躺平</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/benchmark-hard-task-no-oracle/">100 秒被秒杀之后：我们把 benchmark 升级成了"没人会做的题"</a> </li> </ul> </div> </div> <aside class="site-engagement container my-4" aria-label="访问统计与点赞"> <p>全站访问次数：<span data-site-visits aria-live="polite">加载中…</span></p> <button type="button" class="btn btn-outline-primary" data-like-url="https://cjwystz.github.io/blog/2026/metax-tp-overlap-debugging/" disabled> ♥ 给这篇文章点赞 · <span data-like-count>加载中…</span> </button> <span data-like-status role="status" class="ml-2"></span> <small class="d-block mt-2 text-muted">无需登录，可多次点赞。访问次数按页面加载累计；统计由不蒜子和 Applause 社区服务提供。</small> <noscript>开启 JavaScript 后可查看统计并点赞。</noscript> </aside> <script defer src="/assets/js/site-engagement.js"></script> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "Research in large-model systems, multimodal reasoning, and retrieval-augmented generation.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Open-source communities and repositories I contribute to.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "Education, AI infrastructure experience, research, and open-source contributions.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-metax-tp-overlap-排查记录-接口跑通之后-为什么-gemm-反而变慢",
+        
+          title: "MetaX TP overlap 排查记录：接口跑通之后，为什么 GEMM 反而变慢？",
+        
+        description: "从能力查询、原生枚举和 Userbuffer 接口兼容，到 UB 分配消融与 TP4 真实训练短测，记录问题、修复及性能验证边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/metax-tp-overlap-debugging/";
+          
+        },
+      },{id: "post-给-peft-修一个-lora-fa-优化器接口-closure-为什么不能-backward",
+        
+          title: "给 PEFT 修一个 LoRA-FA 优化器接口：closure 为什么不能 backward？",
+        
+        description: "从 CPU 最小复现到梯度上下文修复，记录 PEFT issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/peft-lorafa-closure-grad/";
+          
+        },
+      },{id: "post-基础知识巩固-01-从-transformer-结构到大模型的一次完整推理",
+        
+          title: "基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理",
+        
+        description: "从 token、Embedding、Attention 和 FFN 出发，串起 Prefill、Decode、KV Cache、显存估算与服务调度；附教学计算和可运行的最小注意力练习。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/llm-foundations-01-architecture-to-inference/";
+          
+        },
+      },{id: "post-给-vllm-ascend-修一个-kv-缓存注册-bug-从-tensor-view-到真实-p-d-验证",
+        
+          title: "给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证",
+        
+        description: "记录 Mooncake V1 混合注意力注册路径的一个小修复：恢复底层存储地址、合并重叠区域，并用 CPU 回归与真实 Gemma 3 双卡 P/D 验证明确证据边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-ascend-mooncake-hybrid-registration/";
+          
+        },
+      },{id: "post-910b3-推理研究的九条线索和实验结果",
+        
+          title: "910B3 推理研究的九条线索和实验结果",
+        
+        description: "汇总计算干扰、KV 入站、真实 PD、hybrid 缓存和多模态方向的调研与实验，并记录通信执行路径候选从微基准交叉点到完整 TP2 对照的筛选过程。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-research-screening/";
+          
+        },
+      },{id: "post-910b3-推理实验复核-从干扰微基准到完整模型的负结果",
+        
+          title: "910B3 推理实验复核：从干扰微基准到完整模型的负结果",
+        
+        description: "修正双 stream 计时、重放相同请求 trace、调优 SGLang 基线，并验证 vector attention 与 KV 接收。干扰存在，但微基准优势没有转化为 Qwen3 完整模型收益。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-inference-audit-negative-results/";
+          
+        },
+      },{id: "post-拆到算子看-910b3-上-prefill-和-decode-到底在争什么",
+        
+          title: "拆到算子看:910B3 上 prefill 和 decode 到底在争什么",
+        
+        description: "上一篇在 910B3 上测了 PD 分离的配比效果——3P:4D 吞吐反超一体化 11%,只给 1 张 prefill 卡会把 TTFT p99 打到 9 秒。但那些都是端到端数字,回答不了&quot;为什么&quot;。这篇往下拆一层:用昇腾 msprof 把 Cube/Vector/MTE 三类执行单元分开观测,给出 prefill 与 decode 资源争抢的硬件级证据——同一个 MatMul 算子,prefill 负载下 Cube 占用 0.92,decode 负载下只有 0.14,而搬数通道 MTE2 被打满到 0.99。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-mechanism/";
+          
+        },
+      },{id: "post-在-910b3-上把-llm-推理的-quot-前菜-quot-和-quot-主菜-quot-分开炒-pd-分离实测",
+        
+          title: "在 910B3 上把 LLM 推理的&quot;前菜&quot;和&quot;主菜&quot;分开炒——PD 分离实测",
+        
+        description: "在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B3 上做了真机 PD 的配比实验:7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-disaggregation/";
+          
+        },
+      },{id: "post-守真-而非逐假-ai-生成图像检测为什么总是慢半拍",
+        
+          title: "守真，而非逐假——AI 生成图像检测为什么总是慢半拍",
+        
+        description: "AI 生成图像检测的系统性困境：检测器永远追不上生成器的迭代。这篇博客聊聊这个领域走过的几条路（GAN 指纹、DIRE、UnivFD、latent blending），以及一个换方向的思路——与其学假图长什么样，不如给真实照片的分布修一圈围墙。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/real-envelope-aigc-detection/";
+          
+        },
+      },{id: "post-跑满-4-小时-零交卷-reward-0-0-但这不是躺平",
+        
+          title: "跑满 4 小时、零交卷、reward 0.0——但这不是躺平",
+        
+        description: "开放式性能题的第一次真实 agent 校准：DeepSeek-V4.1-Flash 驱动的 claude-code 在 4B FlagScale/沐曦题上 4 小时跑满、零交卷、reward 0.0——但 3079 条轨迹里是教科书级的双峰诊断、一次通信串行化的实锤，和 +47% 的真实吞吐提升。复盘两个坑（一个算我们的，一个算它的）、阈值决策，以及为什么 binary reward 会抹掉这次实验里最有价值的信息。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-first-agent-calibration/";
+          
+        },
+      },{id: "post-100-秒被秒杀之后-我们把-benchmark-升级成了-quot-没人会做的题-quot",
+        
+          title: "100 秒被秒杀之后：我们把 benchmark 升级成了&quot;没人会做的题&quot;",
+        
+        description: "国产 infra agentic benchmark 的第一次真机校准翻车实录——精心设计的 hard 题被当代模型 100 秒连过五次，复盘出&quot;好题的三条反例&quot;，然后转身做了一道连出题团队自己都没解出来的开放式性能题：32 卡国产 GPU 上把 27B 训练吞吐推过实测纪录。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-hard-task-no-oracle/";
+          
+        },
+      },{id: "post-解剖一道顶级-agentic-考题-frontierswe-推理优化题的设计艺术",
+        
+          title: "解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术",
+        
+        description: "逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/frontierswe-inference-task-anatomy/";
+          
+        },
+      },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-mlsys-2027-submission-in-progress-heterogeneous-modeling-packing-scheduling-for-general-llm-training-qingcheng-jizhi-ustb-co-first-author-to-be-submitted-in-oct-2026",
+          title: 'MLSys 2027 submission in progress: heterogeneous-modeling Packing scheduling for general LLM training (Qingcheng...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "MetaX adaptation, memory optimization, and multimodal training",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-hugging-face-peft",
+          title: 'Hugging Face / PEFT',
+          description: "LoRA-FA optimizer closure gradient-context fix and regression test",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/peft/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
