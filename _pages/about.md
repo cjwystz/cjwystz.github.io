@@ -67,9 +67,9 @@ latest_posts:
   }
 </style>
 
-I am an **AI Infra researcher & engineer** focused on **large-model distributed training and inference systems**, memory optimization, and load scheduling. I am an undergraduate (2023–2027) in Information Security at the **University of Science & Technology Beijing**, and an AI-Infra intern at **Qingcheng Jizhi**, contributing to the FlagOS open-source ecosystem.
+I am an **AI Infra researcher & engineer** focused on **large-model distributed training and inference systems**, memory optimization, and load scheduling. I am an undergraduate (2023–2027) in Information Security at the **University of Science & Technology Beijing**, with AI-Infra internship experience at **Qingcheng Jizhi**, contributing to the FlagOS open-source ecosystem.
 
-My hands-on experience spans **1000-GPU-scale training and inference across heterogeneous accelerators** — Huawei Ascend 910C, MetaX C550, and Ali Zhenwu 810E — alongside NVIDIA A800/A100 clusters. My research on heterogeneous-modeling Packing scheduling (MLSys 2027) delivers **+20% end-to-end training throughput**, and my work on formal-proof-guided geometric reasoning (TMLR 2027, under review) improves GRPO-trained reasoning by **+9.7%** on geometry and **+8.0%** on general math.
+My hands-on experience spans **1000-GPU-scale training and inference across heterogeneous accelerators** — Huawei Ascend 910C, MetaX C550, and Ali Zhenwu 810E — alongside NVIDIA A800/A100 clusters. I have also worked with an **eight-node NVIDIA H20 cluster**. I am a **co-first author** of an ongoing study on sequence packing and scheduling for large-model training. My work on formal-proof-guided geometric reasoning (TMLR 2027, under review) improves GRPO-trained reasoning by **+9.7%** on geometry and **+8.0%** on general math.
 
 I am an open-source contributor to **FlagOS** and **Hugging Face PEFT**, focusing on large-model training and inference systems.
 

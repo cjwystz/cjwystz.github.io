@@ -4,7 +4,7 @@ cv:
   email: 2451427796@qq.com
   location: Beijing, China
   image: ""
-  summary: AI Infra researcher and engineer focused on large-model distributed training & inference, memory optimization and load scheduling. Open-source contributor to FlagOS and Hugging Face PEFT with 1000-GPU-scale experience on heterogeneous accelerators. Seeking a PhD in large-model systems (2028-2029 Fall).
+  summary: AI Infra researcher and engineer focused on large-model distributed training & inference, memory optimization and load scheduling. Open-source contributor to FlagOS and Hugging Face PEFT with 1000-GPU-scale experience on heterogeneous accelerators and hands-on work with an eight-node NVIDIA H20 cluster. Seeking a PhD in large-model systems (2028-2029 Fall).
 
   social_networks:
     - network: GitHub
@@ -29,6 +29,7 @@ cv:
         score: "IELTS 6.5 (all >= 6.0)"
         courses: "Systems security, parallel computing, AI systems"
         highlights:
+          - "Ziyu Fund Special-Class Scholarship, 2025-2026 academic year"
           - "National First Prize, National Metallurgy Science & Technology Competition"
           - "National Second Prize, ASC Student Supercomputer Challenge"
 
@@ -36,11 +37,12 @@ cv:
       - company: Qingcheng Jizhi
         position: AI Infra Intern
         location: China
-        start_date: 2025
-        end_date: present
+        start_date: 2026-06
+        end_date: 2026-11
         summary: Contribute to the FlagOS / FlagScale training framework for the MetaX ecosystem — bug fixes, hardware adaptation and training-framework optimization.
         highlights:
           - "1000-GPU-scale training & inference on Huawei Ascend 910C, MetaX C550, Ali Zhenwu 810E"
+          - "Hands-on work with an eight-node NVIDIA H20 cluster"
           - "FlagScale / Megatron-LM-FL / TransformerEngine-FL: MetaX adaptation and training optimization"
 
       - company: FlagOS Open Source Community
@@ -65,11 +67,10 @@ cv:
 
     Publications:
       - title: Heterogeneous-modeling Packing Scheduling for General LLM Training
-        authors:
-          - Jiawei Chen
-        publisher: MLSys 2027 (to be submitted, Oct 2026)
+        authors: []
+        publisher: Manuscript in preparation
         releaseDate: 2026-10-01
-        summary: Packing time-cost model with snake-dealing scheduling; Chunk-CE / Chunk-Linear memory operators; +20% end-to-end training throughput.
+        summary: Co-first author. Ongoing research on cost-aware sequence packing and scheduling for large-model training.
 
       - title: Formal-Proof-Guided Multimodal Geometric Reasoning
         authors:
@@ -88,6 +89,9 @@ cv:
         summary: RAG-fronted prompt optimization for T2I systems; Tavily + BGE-m3 + ChromaDB two-stage pipeline; +114% average score vs LLM-only rewriting.
 
     Awards:
+      - title: Ziyu Fund Special-Class Scholarship (2025-2026 academic year)
+        awarder: University of Science & Technology Beijing
+        date: 2026
       - title: National First Prize
         awarder: National Metallurgy Science & Technology Competition
         date: 2025
@@ -110,7 +114,7 @@ cv:
         keywords: "vLLM, vLLM-Ascend, SGLang"
       - name: Hardware Platforms
         level: Advanced
-        keywords: "Huawei Ascend 910C, MetaX C550, Ali Zhenwu 810E, NVIDIA A800/A100"
+        keywords: "Huawei Ascend 910C, MetaX C550, Ali Zhenwu 810E, NVIDIA H20 (eight-node cluster), A800/A100"
       - name: Tooling
         level: Advanced
         keywords: "Performance Profiler, Docker, AI-assisted coding"

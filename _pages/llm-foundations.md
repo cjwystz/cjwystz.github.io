@@ -24,9 +24,9 @@ description: 一起从大模型的结构、计算和缓存开始，逐步理解�
 以下是计划主题，尚未发布。
 
 1. Attention 的形状、mask、数值稳定与手算。
-2. KV Cache、GQA、滑动窗口和显存管理。
-3. Prefill／Decode 的性能模型与延迟指标。
-4. Continuous batching、chunked prefill 和前缀复用。
+2. GQA、滑动窗口与不同注意力结构的缓存差异。
+3. Prefill／Decode 的性能模型与带宽、计算瓶颈。
+4. Chunked prefill、前缀复用与在线服务的调度取舍。
 5. 张量并行、通信与 P/D 分离。
 
 [返回全部 blog](/blog/)
