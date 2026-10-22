@@ -1,0 +1,375 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> vLLM 比赛准备记录：先核对 Attention 数值，再调整分块 | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="整理 MiniCPM5-2B 在 BI-V150 上的一次 Attention 分块实验，包括参考检查、实际算子命中和完整请求规模的单轮开发对照。"> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/vllm-contest-attention-tiles/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">vLLM 比赛准备记录：先核对 Attention 数值，再调整分块</h1> <p class="post-meta"> 发布于 2026 年 10 月 21 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/vllm"> <i class="fa-solid fa-hashtag fa-sm"></i> vllm</a>   <a href="/blog/tag/flagos"> <i class="fa-solid fa-hashtag fa-sm"></i> flagos</a>   <a href="/blog/tag/attention"> <i class="fa-solid fa-hashtag fa-sm"></i> attention</a>   <a href="/blog/tag/triton"> <i class="fa-solid fa-hashtag fa-sm"></i> triton</a>   <a href="/blog/tag/profiling"> <i class="fa-solid fa-hashtag fa-sm"></i> profiling</a>   <a href="/blog/tag/learning-notes"> <i class="fa-solid fa-hashtag fa-sm"></i> learning-notes</a>   ·   <a href="/blog/category/engineering"> <i class="fa-solid fa-tag fa-sm"></i> engineering</a>   <a href="/blog/category/llm-serving"> <i class="fa-solid fa-tag fa-sm"></i> llm-serving</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#1-%E5%85%88%E6%8A%8A%E5%AE%9E%E9%AA%8C%E8%8C%83%E5%9B%B4%E6%94%B6%E7%AA%84">1. 先把实验范围收窄</a></li> <li class="toc-entry toc-h2"><a href="#2-%E7%AC%AC%E4%B8%80%E6%AC%A1%E5%8F%82%E8%80%83%E6%A3%80%E6%9F%A5%E6%B2%A1%E6%9C%89%E9%80%9A%E8%BF%87">2. 第一次参考检查没有通过</a></li> <li class="toc-entry toc-h2"><a href="#3-%E5%85%88%E6%AF%94%E8%BE%83%E7%8B%AC%E7%AB%8B%E7%AE%97%E5%AD%90">3. 先比较独立算子</a></li> <li class="toc-entry toc-h2"><a href="#4-%E7%A1%AE%E8%AE%A4%E6%A8%A1%E5%9E%8B%E7%9C%9F%E6%AD%A3%E8%B0%83%E7%94%A8%E4%BA%86%E6%96%B0%E8%B7%AF%E5%BE%84">4. 确认模型真正调用了新路径</a></li> <li class="toc-entry toc-h2"><a href="#5-%E5%AE%8C%E6%95%B4%E8%AF%B7%E6%B1%82%E8%A7%84%E6%A8%A1%E7%9A%84%E5%8D%95%E8%BD%AE%E5%BC%80%E5%8F%91%E5%AF%B9%E7%85%A7">5. 完整请求规模的单轮开发对照</a></li> <li class="toc-entry toc-h2"><a href="#6-%E8%BF%99%E6%AC%A1%E6%9A%82%E6%97%B6%E8%AE%B0%E4%B8%8B%E7%9A%84%E6%96%B9%E6%B3%95">6. 这次暂时记下的方法</a></li> <li class="toc-entry toc-h2"><a href="#%E8%B5%84%E6%96%99%E4%B8%8E%E8%AE%B0%E5%BD%95%E5%8F%A3%E5%BE%84">资料与记录口径</a></li> </ul> </div> <hr> <div id="markdown-content"> <p>这篇在 10 月 23 日补记，整理前几天准备 FlagOS 推理赛道时的一次实验。工作围绕 MiniCPM5-2B、vLLM 插件和 FlagGems 的分页 Attention 展开，先从一个范围较小的 prefill 分块调整开始。</p> <p>目前比较有用的收获，是把数值参考、独立算子测试、真实模型检查和请求吞吐对照接了起来。下面记录的是开发过程与当前配置下的观测，尚未完成正式精度评测和完整比赛流程。</p> <h2 id="1-先把实验范围收窄">1. 先把实验范围收窄</h2> <p>本次使用 BI-V150 32 GiB，框架沿用比赛分支与 FlagGems 5.3.5。Attention 小测采用 BF16、16 个 Query heads、2 个 KV heads、head dimension 128、每页 16 个 token。</p> <p>我主要调整两个执行参数：Query/head 展开后的行分块大小，以及每个程序实例使用的 warp 数。分页寻址、因果可见性和计算精度保持在同一个比较范围内，纯 decode 路径没有顺带改成新的 prefill 配置。</p> <p>这里有个容易误读的地方：<code class="language-plaintext highlighter-rouge">BLOCK_M=64</code> 不代表这个布局每块处理 64 个不同的 token。16:2 的 GQA 配置中，一组 KV 对应 8 个 Query heads；本次展开布局下，BM16 和 BM64 分别对应每块 2 和 8 个 Query token。读 kernel 参数时，需要先还原索引与张量布局。</p> <h2 id="2-第一次参考检查没有通过">2. 第一次参考检查没有通过</h2> <p>开始计时前，我用固定输入和独立 FP32 参考检查输出。第一份未修改 kernel 的小测没有通过，归一化 RMS 误差约为 19.6%，因此那次运行没有被拿来比较优化收益。</p> <p>随后把在线 softmax 的状态拆开检查：行最大值、分母以及除法前的累加器分别与参考比较。当前环境中观察到的主要偏差，是分母比参考多约 1。</p> <p>这还不足以说明原始公式写错了。原代码使用 <code class="language-plaintext highlighter-rouge">M=-inf, L=1</code>；若第一次重缩放的 <code class="language-plaintext highlighter-rouge">alpha=0</code> 正确执行，初始的 1 应被消去，与无 sink 路径的零初始化等价。<strong>目前没有查清这一环境下偏差的精确编译原因。</strong></p> <p>为了继续隔离分块本身的影响，后续在独立副本中，让所有对照和候选采用相同的无 sink 零初始化处理，并重新冻结输入、源码和门槛。集成路径的页表尾部读取掩码也在两边保持一致。这些共同处理属于比较前提，不能算成某一候选独有的优化。</p> <p>这个检查没有覆盖带 attention sink 或其他分段实现的全部路径，也不作为面向所有模型的通用修复结论。</p> <h2 id="3-先比较独立算子">3. 先比较独立算子</h2> <p>小测包含短序列、尾页、首个 chunk、4K/16K 上下文、混合长度、分块边界与纯 decode 等 8 个用例。输出区预填 NaN，尾部放 canary，另外检查无效页和未使用位置，避免只比较一小段正常输出。</p> <p>在冻结的用例与容差下，各候选均通过检查；候选与统一处理后的对照，完整输出逐元素相同。长 Query 的 FP32 参考比较使用每条序列固定抽取的 32 行，短 Query 检查全部行，最大归一化 RMS 约为 0.2332%。这仍然是有限用例的结果。</p> <p>下面两项都是 <strong>2048 个 Query token 的 chunk</strong>，其 KV 长度分别为 4096 和 16384，并非一条完整请求的首 token 延迟。</p> <table> <thead> <tr> <th>配置</th> <th style="text-align: right">当前布局每块 Query token</th> <th style="text-align: right">4K 上下文中位耗时</th> <th style="text-align: right">16K 上下文中位耗时</th> </tr> </thead> <tbody> <tr> <td>BM16 / 4 warps，对照</td> <td style="text-align: right">2</td> <td style="text-align: right">15.255 ms</td> <td style="text-align: right">75.301 ms</td> </tr> <tr> <td>BM32 / 4 warps</td> <td style="text-align: right">4</td> <td style="text-align: right">8.880 ms</td> <td style="text-align: right">43.867 ms</td> </tr> <tr> <td>BM64 / 4 warps</td> <td style="text-align: right">8</td> <td style="text-align: right">6.821 ms</td> <td style="text-align: right">33.387 ms</td> </tr> <tr> <td>BM64 / 8 warps</td> <td style="text-align: right">8</td> <td style="text-align: right">5.478 ms</td> <td style="text-align: right">26.279 ms</td> </tr> </tbody> </table> <p>每项预热 3 次，进行 5 轮交错测量，每轮每配置调用 10 次。编译、参考计算与 profiler 采集不进入事件计时。</p> <p>在这组条件下，BM64 / 8 warps 的独立算子耗时约为对照的 1/2.78 和 1/2.87。更大的行分块可能改善数据复用与工作组织，但实际原因还受硬件、寄存器和共享内存等因素影响，不能把一次参数选择当成跨设备最优值。</p> <h2 id="4-确认模型真正调用了新路径">4. 确认模型真正调用了新路径</h2> <p>独立 kernel 能运行，还需要确认真实模型调用的是同一个实现，并且实际 stride 与人工连续张量的假设一致。</p> <p>集成检查覆盖了实际交错 K/V 页、带间隙的 Query/output 行布局和边界保护。完整模型另用固定 4K、16K 输入，各生成 16 个 token：两边的生成 token 相同，所检查生成 token 及 top-5 logprobs 的最大差值为 0。</p> <p>短 profiling 窗口还记录了真实 launch grid。16K prefill 的每边 8 个执行 step 内，均捕获 336 次目标 Attention 调用；该窗口的 Attention 累计 GPU 时间由约 12.795 秒变为 4.564 秒。</p> <p>这些记录可以支持“目标路径已命中、所检查的模型输出一致”，不能代替整套精度评测；采样窗口里的算子时间比，也不能代替整轮请求吞吐比。</p> <h2 id="5-完整请求规模的单轮开发对照">5. 完整请求规模的单轮开发对照</h2> <p>之后把候选接入模型，对两个输入长度分别完成一轮完整请求数量的开发 A/B：</p> <table> <thead> <tr> <th>场景</th> <th>输入 / 输出长度</th> <th style="text-align: right">每边请求数</th> <th style="text-align: right">并发上限</th> </tr> </thead> <tbody> <tr> <td>4K</td> <td>4096 / 1024 tokens</td> <td style="text-align: right">256</td> <td style="text-align: right">64</td> </tr> <tr> <td>16K</td> <td>16384 / 1024 tokens</td> <td style="text-align: right">128</td> <td style="text-align: right">64</td> </tr> </tbody> </table> <p>两边都使用独立新启动的服务；同一场景的 serve 参数与实际 worker 配置一致。纳入比较的日志没有额外 warmup 请求，也没有继承另一场景的前缀缓存。中途被停止的旧 16K 测量没有拼进汇总。</p> <table> <thead> <tr> <th>场景</th> <th style="text-align: right">BM16 / 4 warps 总 tokens/s</th> <th style="text-align: right">BM64 / 8 warps 总 tokens/s</th> <th style="text-align: right">观测变化</th> </tr> </thead> <tbody> <tr> <td>4K</td> <td style="text-align: right">1551.85</td> <td style="text-align: right">1965.95</td> <td style="text-align: right">+26.68%</td> </tr> <tr> <td>16K</td> <td style="text-align: right">873.06</td> <td style="text-align: right">1524.03</td> <td style="text-align: right">+74.56%</td> </tr> </tbody> </table> <p>这里沿用 benchmark 的 <strong>Total tokens/s</strong>，计入输入与输出 token，不是只统计新生成 token。两边全部请求完成、零失败；4K 没有抢占，16K 两边均记录了 4 次抢占。</p> <p>对应的平均 TTFT，4K 为 15.125 秒与 9.318 秒，16K 为 621.266 秒与 335.911 秒。这是并发 64、长请求压力下的请求级观测，包含等待与调度，不能读成单请求 Attention 的计算时间。</p> <p>最重要的比较边界有三点：</p> <ul> <li> <strong>对照和候选都包含同样的数值处理与页表掩码处理</strong>，所以比较隔离的是分块变化，不是相对完全未修改官方版本的收益</li> <li> <strong>每个场景、每边仅完成一轮</strong>，当前数据不能估计运行间方差，也不是官方四轮汇总成绩</li> <li> <strong>尚未运行 MATH-500 正式精度门</strong>，短输出与 logprob 检查不能替代它</li> </ul> <p>后续如果继续投入，应先完成正式精度评测，再按一致缓存初态和完整协议重复测量。扩大 workload 或换设备后，原来的分块选择也需要重新检查。</p> <h2 id="6-这次暂时记下的方法">6. 这次暂时记下的方法</h2> <p>对我而言，这次最值得保留的是检查顺序：先确认当前输入与参考一致，再比较算子；确认模型实际使用了它，再比较请求级指标。前一层通过，只是进入下一层验证的条件。</p> <p>后面的 profiling 也出现了正确但更慢的候选，以及 kernel 之外的主机侧等待。我把这些另记在<a href="/blog/2026/vllm-contest-profiling-notes/">后续排查笔记</a>，避免只保留一次有提升的结果。</p> <h2 id="资料与记录口径">资料与记录口径</h2> <ul> <li> <a href="https://flagos.io/race-detail-season2?id=539vlt2p&amp;lang=cn" rel="external nofollow noopener" target="_blank">FlagOS 赛季二赛道说明</a>：比赛背景与指定软件栈以主办方页面为准</li> <li> <a href="https://github.com/flagos-ai/FlagGems" rel="external nofollow noopener" target="_blank">FlagGems</a> 与 <a href="https://github.com/flagos-ai/vllm-plugin-FL" rel="external nofollow noopener" target="_blank">vLLM 插件</a>：本文相关的软件项目</li> <li> <a href="https://arxiv.org/abs/2205.14135" rel="external nofollow noopener" target="_blank">FlashAttention</a>：分块与在线 softmax 的背景，不是本文实验结果的来源</li> </ul> <p>表中数据来自我保留的 10 月 21 日开发日志与结果文件，不是上述项目或主办方发布的成绩。本文只整理已完成的检查，没有把待执行实验记为结果。</p> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/llm-foundations-02-kv-memory-and-scheduling/">基础知识巩固 02：KV 显存、连续批处理与推理延迟</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/vllm-contest-profiling-notes/">vLLM 比赛排查笔记：两个负结果和一次主机内存复测</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/metax-tp-overlap-debugging/">MetaX TP overlap 排查记录：接口跑通之后，为什么 GEMM 反而变慢？</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/peft-lorafa-closure-grad/">给 PEFT 修一个 LoRA-FA 优化器接口：closure 为什么不能 backward？</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/llm-foundations-01-architecture-to-inference/">基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/vllm-ascend-mooncake-hybrid-registration/">给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-research-screening/">910B3 推理研究的九条线索和实验结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-inference-audit-negative-results/">910B3 推理实验复核：从干扰微基准到完整模型的负结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-mechanism/">拆到算子看:910B3 上 prefill 和 decode 到底在争什么</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-disaggregation/">在 910B3 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测</a> </li> </ul> </div> </div> <aside class="site-engagement container my-4" aria-label="访问统计与点赞"> <p>全站访问次数：<span data-site-visits aria-live="polite">加载中…</span></p> <button type="button" class="btn btn-outline-primary" data-like-url="https://cjwystz.github.io/blog/2026/vllm-contest-attention-tiles/" disabled> ♥ 给这篇文章点赞 · <span data-like-count>加载中…</span> </button> <span data-like-status role="status" class="ml-2"></span> <small class="d-block mt-2 text-muted">无需登录，可多次点赞。访问次数按页面加载累计；统计由不蒜子和 Applause 社区服务提供。</small> <noscript>开启 JavaScript 后可查看统计并点赞。</noscript> </aside> <script defer src="/assets/js/site-engagement.js"></script> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "Research in large-model systems, multimodal reasoning, and retrieval-augmented generation.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Open-source communities and repositories I contribute to.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "Education, AI infrastructure experience, research, and open-source contributions.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-基础知识巩固-02-kv-显存-连续批处理与推理延迟",
+        
+          title: "基础知识巩固 02：KV 显存、连续批处理与推理延迟",
+        
+        description: "用不等长请求、分页和调度的手算例子，理解 KV 占用如何增长，以及 TTFT、TPOT 和吞吐为什么需要一起看。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/llm-foundations-02-kv-memory-and-scheduling/";
+          
+        },
+      },{id: "post-vllm-比赛排查笔记-两个负结果和一次主机内存复测",
+        
+          title: "vLLM 比赛排查笔记：两个负结果和一次主机内存复测",
+        
+        description: "记录 Attention 后续候选为何没有保留、缩批阶段的配置查询开销，以及 C500 主机内存 OOM 复测的现象与未解决问题。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-contest-profiling-notes/";
+          
+        },
+      },{id: "post-vllm-比赛准备记录-先核对-attention-数值-再调整分块",
+        
+          title: "vLLM 比赛准备记录：先核对 Attention 数值，再调整分块",
+        
+        description: "整理 MiniCPM5-2B 在 BI-V150 上的一次 Attention 分块实验，包括参考检查、实际算子命中和完整请求规模的单轮开发对照。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-contest-attention-tiles/";
+          
+        },
+      },{id: "post-metax-tp-overlap-排查记录-接口跑通之后-为什么-gemm-反而变慢",
+        
+          title: "MetaX TP overlap 排查记录：接口跑通之后，为什么 GEMM 反而变慢？",
+        
+        description: "从能力查询、原生枚举和 Userbuffer 接口兼容，到 UB 分配消融与 TP4 真实训练短测，记录问题、修复及性能验证边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/metax-tp-overlap-debugging/";
+          
+        },
+      },{id: "post-给-peft-修一个-lora-fa-优化器接口-closure-为什么不能-backward",
+        
+          title: "给 PEFT 修一个 LoRA-FA 优化器接口：closure 为什么不能 backward？",
+        
+        description: "从 CPU 最小复现到梯度上下文修复，记录 PEFT issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/peft-lorafa-closure-grad/";
+          
+        },
+      },{id: "post-基础知识巩固-01-从-transformer-结构到大模型的一次完整推理",
+        
+          title: "基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理",
+        
+        description: "从 token、Embedding、Attention 和 FFN 出发，串起 Prefill、Decode、KV Cache、显存估算与服务调度；附教学计算和可运行的最小注意力练习。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/llm-foundations-01-architecture-to-inference/";
+          
+        },
+      },{id: "post-给-vllm-ascend-修一个-kv-缓存注册-bug-从-tensor-view-到真实-p-d-验证",
+        
+          title: "给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证",
+        
+        description: "记录 Mooncake V1 混合注意力注册路径的一个小修复：恢复底层存储地址、合并重叠区域，并用 CPU 回归与真实 Gemma 3 双卡 P/D 验证明确证据边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-ascend-mooncake-hybrid-registration/";
+          
+        },
+      },{id: "post-910b3-推理研究的九条线索和实验结果",
+        
+          title: "910B3 推理研究的九条线索和实验结果",
+        
+        description: "汇总计算干扰、KV 入站、真实 PD、hybrid 缓存和多模态方向的调研与实验，并记录通信执行路径候选从微基准交叉点到完整 TP2 对照的筛选过程。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-research-screening/";
+          
+        },
+      },{id: "post-910b3-推理实验复核-从干扰微基准到完整模型的负结果",
+        
+          title: "910B3 推理实验复核：从干扰微基准到完整模型的负结果",
+        
+        description: "修正双 stream 计时、重放相同请求 trace、调优 SGLang 基线，并验证 vector attention 与 KV 接收。干扰存在，但微基准优势没有转化为 Qwen3 完整模型收益。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-inference-audit-negative-results/";
+          
+        },
+      },{id: "post-拆到算子看-910b3-上-prefill-和-decode-到底在争什么",
+        
+          title: "拆到算子看:910B3 上 prefill 和 decode 到底在争什么",
+        
+        description: "上一篇在 910B3 上测了 PD 分离的配比效果——3P:4D 吞吐反超一体化 11%,只给 1 张 prefill 卡会把 TTFT p99 打到 9 秒。但那些都是端到端数字,回答不了&quot;为什么&quot;。这篇往下拆一层:用昇腾 msprof 把 Cube/Vector/MTE 三类执行单元分开观测,给出 prefill 与 decode 资源争抢的硬件级证据——同一个 MatMul 算子,prefill 负载下 Cube 占用 0.92,decode 负载下只有 0.14,而搬数通道 MTE2 被打满到 0.99。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-mechanism/";
+          
+        },
+      },{id: "post-在-910b3-上把-llm-推理的-quot-前菜-quot-和-quot-主菜-quot-分开炒-pd-分离实测",
+        
+          title: "在 910B3 上把 LLM 推理的&quot;前菜&quot;和&quot;主菜&quot;分开炒——PD 分离实测",
+        
+        description: "在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B3 上做了真机 PD 的配比实验:7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-disaggregation/";
+          
+        },
+      },{id: "post-守真-而非逐假-ai-生成图像检测为什么总是慢半拍",
+        
+          title: "守真，而非逐假——AI 生成图像检测为什么总是慢半拍",
+        
+        description: "AI 生成图像检测的系统性困境：检测器永远追不上生成器的迭代。这篇博客聊聊这个领域走过的几条路（GAN 指纹、DIRE、UnivFD、latent blending），以及一个换方向的思路——与其学假图长什么样，不如给真实照片的分布修一圈围墙。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/real-envelope-aigc-detection/";
+          
+        },
+      },{id: "post-跑满-4-小时-零交卷-reward-0-0-但这不是躺平",
+        
+          title: "跑满 4 小时、零交卷、reward 0.0——但这不是躺平",
+        
+        description: "开放式性能题的第一次真实 agent 校准：DeepSeek-V4.1-Flash 驱动的 claude-code 在 4B FlagScale/沐曦题上 4 小时跑满、零交卷、reward 0.0——但 3079 条轨迹里是教科书级的双峰诊断、一次通信串行化的实锤，和 +47% 的真实吞吐提升。复盘两个坑（一个算我们的，一个算它的）、阈值决策，以及为什么 binary reward 会抹掉这次实验里最有价值的信息。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-first-agent-calibration/";
+          
+        },
+      },{id: "post-100-秒被秒杀之后-我们把-benchmark-升级成了-quot-没人会做的题-quot",
+        
+          title: "100 秒被秒杀之后：我们把 benchmark 升级成了&quot;没人会做的题&quot;",
+        
+        description: "国产 infra agentic benchmark 的第一次真机校准翻车实录——精心设计的 hard 题被当代模型 100 秒连过五次，复盘出&quot;好题的三条反例&quot;，然后转身做了一道连出题团队自己都没解出来的开放式性能题：32 卡国产 GPU 上把 27B 训练吞吐推过实测纪录。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-hard-task-no-oracle/";
+          
+        },
+      },{id: "post-解剖一道顶级-agentic-考题-frontierswe-推理优化题的设计艺术",
+        
+          title: "解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术",
+        
+        description: "逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/frontierswe-inference-task-anatomy/";
+          
+        },
+      },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-ongoing-research-on-sequence-packing-and-scheduling-for-large-model-training-co-first-author-the-manuscript-is-in-preparation",
+          title: 'Ongoing research on sequence packing and scheduling for large-model training; co-first author. The...',
+          description: "",
+          section: "News",},{id: "news-received-the-ziyu-fund-special-class-scholarship-紫玉基金特等奖学金-at-ustb-for-the-2025-2026-academic-year",
+          title: 'Received the **Ziyu Fund Special-Class Scholarship (紫玉基金特等奖学金)** at USTB for the 2025–2026 academic...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "MetaX adaptation, memory optimization, and multimodal training",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-hugging-face-peft",
+          title: 'Hugging Face / PEFT',
+          description: "LoRA-FA optimizer closure gradient-context fix and regression test",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/peft/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>

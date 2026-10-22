@@ -1,0 +1,417 @@
+<!DOCTYPE html> <html lang="en"> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <meta http-equiv="X-UA-Compatible" content="IE=edge"> <title> 基础知识巩固 02：KV 显存、连续批处理与推理延迟 | Chen Jiawei </title> <meta name="author" content="Chen Jiawei"> <meta name="description" content="用不等长请求、分页和调度的手算例子，理解 KV 占用如何增长，以及 TTFT、TPOT 和吞吐为什么需要一起看。"> <meta name="keywords" content="ai-infra, llm-systems, distributed-training, memory-optimization, academic-website"> <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; media-src 'self' https:; frame-src 'self' https:; connect-src 'self' https:;"> <style>
+  :root {
+    --max-content-width: 930px;
+  }
+</style> <link rel="stylesheet" href="/assets/css/tailwind.css?v=50c64c15cbb9fd1ce6056fdb8bcb4b62"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css" integrity="sha256-MVopmdyC2tYTiJ8wlktf0uh0v4NgT+vNdyVFepi7Q0c=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/academicons@1.9.5/css/academicons.min.css" integrity="sha256-SzrCOBJbGVFMahewkgjwnApaV2+av1DwMAA+/QGLyZw=" crossorigin="anonymous"> <link defer rel="stylesheet" href="https://cdn.jsdelivr.net/npm/scholar-icons@1.0.3/css/scholar-icons.css" integrity="sha256-VY3hHVj/hNX3fYG6wtbA6TcKJQl7+FthzGSyIB64klY=" crossorigin="anonymous"> <link defer rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Roboto+Slab:100,300,400,500,700|Material+Icons&amp;display=swap"> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-github.css?v=591dab5a4e56573bf4ef7fd332894c99" media="" id="highlight_theme_light"> <link rel="shortcut icon" href="/assets/img/favicon.svg?v=d3b0891c3db08cc51cf508a08b1eeac1"> <link rel="stylesheet" href="/assets/css/main.css?v=3116ba77db9ee1581d05bb3e86fbf7f1"> <link rel="canonical" href="https://cjwystz.github.io/blog/2026/llm-foundations-02-kv-memory-and-scheduling/"> <script src="/assets/js/theme.js?v=5286c3e4c334d0ecb8fc0c40ff4fa7ec"></script> <link defer rel="stylesheet" href="/assets/css/jekyll-pygments-themes-native.css?v=5847e5ed4a4568527aa6cfab446049ca" media="none" id="highlight_theme_dark"> <script>
+    initTheme();
+  </script> </head> <body class="fixed-top-nav "> <header> <nav id="navbar" class="navbar navbar-light navbar-expand-sm fixed-top" role="navigation"> <div class="container"> <a class="navbar-brand title font-weight-lighter" href="/"> Chen Jiawei </a> <button class="navbar-toggler collapsed navbar-toggler-main" type="button" data-nav-toggle="navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar top-bar"></span> <span class="icon-bar middle-bar"></span> <span class="icon-bar bottom-bar"></span> </button> <div class="collapse navbar-collapse navbar-collapse-main" id="navbarNav"> <ul class="navbar-nav navbar-menu-list flex-nowrap"> <li class="nav-item "> <a class="nav-link" href="/">about </a> </li> <li class="nav-item active"> <a class="nav-link" href="/blog/">blog </a> </li> <li class="nav-item "> <a class="nav-link" href="/publications/">publications </a> </li> <li class="nav-item "> <a class="nav-link" href="/projects/">projects </a> </li> <li class="nav-item "> <a class="nav-link" href="/repositories/">repositories </a> </li> <li class="nav-item "> <a class="nav-link" href="/cv/">CV </a> </li> <li class="nav-item "> <a class="nav-link" href="https://github.com/cjwystz" rel="external nofollow noopener" target="_blank">中文版 </a> </li> <li class="nav-item"> <button id="search-toggle" type="button" title="Search" aria-label="Open search"> <span class="nav-link">ctrl k <i class="fa-solid fa-magnifying-glass"></i></span> </button> </li> <li class="toggle-container"> <button id="light-toggle" type="button" title="Change theme" aria-label="Change color theme"> <i class="fa-half-sun-moon" id="light-toggle-system"></i> <i class="fa-solid fa-moon" id="light-toggle-dark"></i> <i class="fa-solid fa-sun" id="light-toggle-light"></i> </button> </li> </ul> </div> </div> </nav> <progress id="progress" value="0"> <div class="progress-container"> <span class="progress-bar"></span> </div> </progress> </header> <div class="container mt-5" role="main"> <div class="post"> <header class="post-header"> <h1 class="post-title">基础知识巩固 02：KV 显存、连续批处理与推理延迟</h1> <p class="post-meta"> 发布于 2026 年 10 月 23 日 </p> <p class="post-tags"> <a href="/blog/2026"> <i class="fa-solid fa-calendar fa-sm"></i> 2026 </a>   ·   <a href="/blog/tag/kv-cache"> <i class="fa-solid fa-hashtag fa-sm"></i> kv-cache</a>   <a href="/blog/tag/gqa"> <i class="fa-solid fa-hashtag fa-sm"></i> gqa</a>   <a href="/blog/tag/paged-attention"> <i class="fa-solid fa-hashtag fa-sm"></i> paged-attention</a>   <a href="/blog/tag/continuous-batching"> <i class="fa-solid fa-hashtag fa-sm"></i> continuous-batching</a>   <a href="/blog/tag/latency"> <i class="fa-solid fa-hashtag fa-sm"></i> latency</a>   <a href="/blog/tag/learning-notes"> <i class="fa-solid fa-hashtag fa-sm"></i> learning-notes</a>   ·   <a href="/blog/category/foundations"> <i class="fa-solid fa-tag fa-sm"></i> foundations</a>   <a href="/blog/category/llm-serving"> <i class="fa-solid fa-tag fa-sm"></i> llm-serving</a> </p> </header> <article class="post-content"> <div id="table-of-contents"> <ul id="toc" class="section-nav"> <li class="toc-entry toc-h2"><a href="#1-%E5%85%88%E4%BB%8E%E4%B8%89%E4%B8%AA%E4%B8%8D%E5%90%8C%E9%95%BF%E5%BA%A6%E7%9A%84%E8%AF%B7%E6%B1%82%E5%BC%80%E5%A7%8B">1. 先从三个不同长度的请求开始</a></li> <li class="toc-entry toc-h2"><a href="#2-%E4%B8%8D%E7%AD%89%E9%95%BF%E8%AF%B7%E6%B1%82%E5%BA%94%E8%AF%A5%E5%AF%B9%E9%95%BF%E5%BA%A6%E6%B1%82%E5%92%8C">2. 不等长请求，应该对长度求和</a></li> <li class="toc-entry toc-h2"><a href="#3-%E5%88%86%E9%A1%B5%E6%9C%89%E6%95%88%E6%95%B0%E6%8D%AE%E6%B2%A1%E6%9C%89%E6%B6%88%E5%A4%B1%E5%88%86%E9%85%8D%E6%96%B9%E5%BC%8F%E5%8F%98%E4%BA%86">3. 分页：有效数据没有消失，分配方式变了</a></li> <li class="toc-entry toc-h2"><a href="#4-%E6%9C%89%E7%A9%BA-block%E4%B8%8D%E4%B8%80%E5%AE%9A%E9%A9%AC%E4%B8%8A%E6%8E%A5%E6%94%B6%E6%96%B0%E8%AF%B7%E6%B1%82">4. 有空 block，不一定马上接收新请求</a></li> <li class="toc-entry toc-h2"><a href="#5-%E6%89%8B%E6%8E%A8%E4%B8%80%E6%AC%A1%E8%BF%9E%E7%BB%AD%E6%89%B9%E5%A4%84%E7%90%86">5. 手推一次连续批处理</a></li> <li class="toc-entry toc-h2"><a href="#6-%E6%8B%86%E5%B0%8F-prefill%E4%B8%BA%E4%BB%80%E4%B9%88%E5%8F%AF%E8%83%BD%E4%B8%80%E8%BE%B9%E6%94%B9%E5%96%84%E4%B8%80%E8%BE%B9%E5%8F%98%E6%85%A2">6. 拆小 Prefill，为什么可能一边改善、一边变慢</a></li> <li class="toc-entry toc-h2"><a href="#7-ttfttpot-%E4%B8%8E-itl%E5%85%88%E5%9B%BA%E5%AE%9A%E8%AE%A1%E6%97%B6%E5%8F%A3%E5%BE%84">7. TTFT、TPOT 与 ITL：先固定计时口径</a></li> <li class="toc-entry toc-h2"><a href="#8-%E4%B8%80%E4%B8%AA%E5%8F%AA%E7%94%A8-python-%E6%A0%87%E5%87%86%E5%BA%93%E7%9A%84%E5%B0%8F%E7%BB%83%E4%B9%A0">8. 一个只用 Python 标准库的小练习</a></li> <li class="toc-entry toc-h2"><a href="#9-%E8%87%AA%E6%B5%8B%E5%85%88%E5%9B%9E%E7%AD%94%E5%86%8D%E5%B1%95%E5%BC%80">9. 自测：先回答，再展开</a></li> <li class="toc-entry toc-h2"><a href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99">参考资料</a></li> </ul> </div> <hr> <div id="markdown-content"> <p><a href="/blog/2026/llm-foundations-01-architecture-to-inference/">第一篇</a>把从输入到输出的计算链路接了起来。这篇继续记几个服务系统中的基础问题：不同请求的 KV 应该怎样相加？分页到底省了什么？为什么连续批处理仍然会排队？延迟指标又该从哪里开始计时？</p> <p>下面以普通全注意力、GQA、单条生成序列为例，暂不考虑投机解码、前缀共享和缓存卸载。数字均为<strong>教学设定和算术结果，不是硬件性能实测</strong>。目标是先把账算清楚，再去读具体框架的实现。</p> <p>系列入口：<a href="/blog/llm-foundations/">基础知识巩固</a></p> <h2 id="1-先从三个不同长度的请求开始">1. 先从三个不同长度的请求开始</h2> <p>假设某个模型有32层，每层8个 KV head，每个 head 的 K、V 维度均为128，缓存使用 BF16，每个元素占2字节。</p> <p>一个 token 在所有层的 KV 大小为：</p> \[m_{token}=2\times32\times8\times128\times2 =131072\ \mathrm{bytes}=128\ \mathrm{KiB}\] <p>最前面的2表示 K 和 V 两份。这里用的是 <strong>KV head 数</strong>，不是 Query head 数；GQA 中多个 Query head 共享一组 K/V，不应为每组 Query 重复计入缓存。</p> <p>现在三条请求当前已缓存的长度分别如下：</p> <table> <thead> <tr> <th>请求</th> <th style="text-align: right">已缓存 token 数</th> <th style="text-align: right">有效 KV 数据</th> </tr> </thead> <tbody> <tr> <td>A</td> <td style="text-align: right">4096</td> <td style="text-align: right">512 MiB</td> </tr> <tr> <td>B</td> <td style="text-align: right">2048</td> <td style="text-align: right">256 MiB</td> </tr> <tr> <td>C</td> <td style="text-align: right">1024</td> <td style="text-align: right">128 MiB</td> </tr> <tr> <td>合计</td> <td style="text-align: right">7168</td> <td style="text-align: right">896 MiB，即0.875 GiB</td> </tr> </tbody> </table> <p>缓存长度包括已经计算过 K/V 的提示词和生成位置。它不一定等于“提示词长度＋界面已经显示的输出数”：刚采样出的 token，通常还没有经过下一次前向，也就还没有它自己的 KV。</p> <p>如果三条请求接下来各完成一个新位置的前向，缓存合计增加：</p> \[3\times128\ \mathrm{KiB}=384\ \mathrm{KiB}\] <p>因此，活跃请求数不变时，缓存也会继续增长。只检查请求刚进入服务时能否放下，还不够。</p> <h2 id="2-不等长请求应该对长度求和">2. 不等长请求，应该对长度求和</h2> <p>把上面的过程写成公式。若所有层配置相同，K/V 维度相同，且每条序列单独保存缓存：</p> \[M_{payload}=2LH_{kv}d_{head}s\sum_{i=1}^{R}T_i\] <p>其中，<code class="language-plaintext highlighter-rouge">R</code> 是同时保留缓存的序列数，<code class="language-plaintext highlighter-rouge">T_i</code> 是第 <code class="language-plaintext highlighter-rouge">i</code> 条序列已缓存的位置数，<code class="language-plaintext highlighter-rouge">s</code> 是每个元素的字节数。只有长度都相同时，才可以把求和写成 <code class="language-plaintext highlighter-rouge">R × T</code>。</p> <p>用最长长度乘请求数，可能高估不等长请求的有效数据；直接使用平均长度则需要明确，这个平均是<strong>当前这些请求</strong>的平均，不能随便换成数据集的平均输入长度。</p> <p>这个公式只计算有效 KV。服务显存还包括权重、临时激活、workspace、通信缓冲、图捕获占用、分配粒度及缓存元数据。某些框架还会提前预留较大的 KV 池，所以监控里的显存占用不一定随着一条请求结束而马上下降；释放的 block 可以回到池内供下个请求使用。</p> <p>另外，<strong>总量除以 TP 度数不一定就是每张卡的 KV</strong>。这取决于 KV head 如何分片、是否复制，以及流水线如何分层。不同层的缓存长度或结构不同时，也要逐层计算。滑动窗口、MLA 和线性注意力需要各自的状态模型。</p> <h2 id="3-分页有效数据没有消失分配方式变了">3. 分页：有效数据没有消失，分配方式变了</h2> <p>假设一个 KV block 能存16个位置。对当前缓存长度为19和33的两条请求：</p> <table> <thead> <tr> <th>请求</th> <th style="text-align: right">有效位置</th> <th style="text-align: right">所需 block</th> <th style="text-align: right">分配容量</th> <th style="text-align: right">尾部空位</th> </tr> </thead> <tbody> <tr> <td>D</td> <td style="text-align: right">19</td> <td style="text-align: right">2</td> <td style="text-align: right">32</td> <td style="text-align: right">13</td> </tr> <tr> <td>E</td> <td style="text-align: right">33</td> <td style="text-align: right">3</td> <td style="text-align: right">48</td> <td style="text-align: right">15</td> </tr> <tr> <td>合计</td> <td style="text-align: right">52</td> <td style="text-align: right">5</td> <td style="text-align: right">80</td> <td style="text-align: right">28</td> </tr> </tbody> </table> <p>计算使用向上取整：</p> \[n_i=\left\lceil\frac{T_i}{b}\right\rceil, \qquad M_{blocks}=m_{token}\,b\sum_i n_i\] <p>在本例中，有效数据为 <code class="language-plaintext highlighter-rouge">52 × 128 KiB = 6.5 MiB</code>，已分配 block 容量为 <code class="language-plaintext highlighter-rouge">80 × 128 KiB = 10 MiB</code>。多出的3.5 MiB是这些 block 中暂未使用的空间，还没有计算 block table 等元数据。</p> <p>这不表示分页比连续布局必然多用3.5 MiB。比较对象应是实际分配策略：如果原先按最大长度为每条请求预留很大的连续区域，按需分配小 block 就可能节省大量预留空间。分页自身仍有尾部浪费；简单顺序填充、没有共享或额外预留时，每条序列尾部最多空 <code class="language-plaintext highlighter-rouge">b - 1</code> 个位置。</p> <p>逻辑位置可以这样映射：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>请求 D：逻辑 block 0 → 物理 block 7
+        逻辑 block 1 → 物理 block 2
+
+请求 E：逻辑 block 0 → 物理 block 4
+        逻辑 block 1 → 物理 block 9
+        逻辑 block 2 → 物理 block 1
+</code></pre></div></div> <p>模型仍然按逻辑顺序访问上下文，物理 block 不要求连续。<strong>同样52个有效位置，仅仅分页不会降低其 K/V 元素数量</strong>。量化改变每个元素的存储成本；前缀共享减少重复存储；它们与分页解决的是不同层面的问题。<a href="https://arxiv.org/abs/2309.06180" rel="external nofollow noopener" target="_blank">PagedAttention 原论文</a>详细介绍了这套逻辑到物理的映射。</p> <h2 id="4-有空-block不一定马上接收新请求">4. 有空 block，不一定马上接收新请求</h2> <p>内存管理解决“数据放哪里”，调度解决“这一轮计算谁”。判断能否接入请求，至少要同时看：</p> <ul> <li>能否容纳已有及即将增长的 KV</li> <li>是否达到活跃请求数限制</li> <li>本轮还能处理多少 token</li> <li>调度策略如何安排 Prefill、Decode 与等待请求</li> </ul> <p>这里的 token 预算是待计算位置数，不是预计生成长度。例如，8条请求各做一个标准 Decode 位置，就是8个待计算 token；再加入一段长度1000的 Prefill，合计1008个位置。这个计数可用于资源限制，<strong>不代表 Prefill 和 Decode 的每个 token 耗时相同</strong>。</p> <p>请求数量也不等于负载大小。两条请求可能是短上下文 Decode，也可能各有数万 token 的 Prefill，计算形态和缓存需求差别很大。</p> <h2 id="5-手推一次连续批处理">5. 手推一次连续批处理</h2> <p>为看清边界，设定一个简化调度规则：最多2条活跃请求，每轮最多计算5个位置，单次 Prefill chunk 最多4个位置。</p> <p>A、B已经完成 Prefill，分别还需输出2个、4个 token。C刚到达，提示词长6，需要输出2个 token。下面的输出编号只表示本例中的剩余生成进度。</p> <table> <thead> <tr> <th>调度轮次</th> <th>请求 A</th> <th>请求 B</th> <th>请求 C</th> <th style="text-align: right">本轮待计算位置</th> </tr> </thead> <tbody> <tr> <td>1</td> <td>Decode，输出 A1</td> <td>Decode，输出 B1</td> <td>等待</td> <td style="text-align: right">2</td> </tr> <tr> <td>2</td> <td>Decode，输出 A2，结束</td> <td>Decode，输出 B2</td> <td>等待</td> <td style="text-align: right">2</td> </tr> <tr> <td>3</td> <td>已退出</td> <td>Decode，输出 B3</td> <td>Prefill 前4个位置</td> <td style="text-align: right">5</td> </tr> <tr> <td>4</td> <td>已退出</td> <td>Decode，输出 B4，结束</td> <td>Prefill 后2个位置，输出 C1</td> <td style="text-align: right">3</td> </tr> <tr> <td>5</td> <td>已退出</td> <td>已退出</td> <td>输入 C1，Decode 输出 C2，结束</td> <td style="text-align: right">1</td> </tr> </tbody> </table> <p>C没有在第1轮插入，是因为活跃请求数已满，虽然本轮 token 预算尚有剩余。A结束后，下一轮才让C进入；不用等待B也完成，这就是迭代边界上调整 batch 的意义。</p> <p>C的两个 Prefill chunk 属于同一上下文，第二块要访问第一块的 KV。完成最后一块后，其最后位置的 logits 可以产生 C1；生成 C2 时，才把 C1 作为新输入做增量前向。</p> <p>这张表没有给每轮设置毫秒数。第3轮有 Prefill，不会因为轮次编号相邻，就和第1轮耗时相等。它也不是某个框架当前调度器的逐行复刻，只是用于区分请求数、token预算、缓存与迭代边界。</p> <p>连续批处理允许在调度边界加入请求，<strong>不保证任何新请求只等待一轮</strong>，也不意味着可以在任意正在运行的 kernel 中途插入工作。资源不足或策略限制仍会造成排队。</p> <h2 id="6-拆小-prefill为什么可能一边改善一边变慢">6. 拆小 Prefill，为什么可能一边改善、一边变慢</h2> <p>长 Prefill 若一次占用设备较久，正在生成的请求可能迟迟得不到下一次 Decode。把 Prefill 拆成 chunk，可以给调度器更多安排其他请求的机会。</p> <p>但 chunk 变小也可能带来更多调度和启动开销，改变矩阵乘的形态，并让该请求经历多轮才能得到首 token。所以需要同时观察新请求的首 token 延迟和已有请求的输出间隔。不是把 chunk 调得越小越好，也不能只凭一张调度表就宣称吞吐提升。</p> <p><a href="https://arxiv.org/abs/2401.09670" rel="external nofollow noopener" target="_blank">DistServe</a>分析了 Prefill 与 Decode 共享资源时的干扰。这里借用这个问题帮助理解取舍，不复用论文的实验数字，也不把特定系统的结果当成所有硬件上的定律。</p> <h2 id="7-ttfttpot-与-itl先固定计时口径">7. TTFT、TPOT 与 ITL：先固定计时口径</h2> <p>本文使用客户端时间戳：请求发出为 <code class="language-plaintext highlighter-rouge">t_0</code>，第一个输出 token 到达为 <code class="language-plaintext highlighter-rouge">t_1</code>，最后一个到达为 <code class="language-plaintext highlighter-rouge">t_G</code>，输出数为 <code class="language-plaintext highlighter-rouge">G</code>。</p> \[\mathrm{TTFT}=t_1-t_0\] <p>它可以包含网络、服务端排队、输入处理、Prefill和采样等，不能直接等同于设备上的 Prefill kernel 时间。服务端内部指标可能从另一个时间点开始，比较前要核对定义。</p> <p>对于 <code class="language-plaintext highlighter-rouge">G &gt; 1</code>：</p> \[\mathrm{TPOT}=\frac{t_G-t_1}{G-1}\] <p>分母是首 token 后的间隔数。只有一个输出 token 时，没有后续间隔，本文记为“不适用”，不把它当成0毫秒的快速 Decode。</p> <p>取教学时间戳 <code class="language-plaintext highlighter-rouge">[300, 310, 320, 420]</code> 毫秒，请求在0毫秒发出：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>TTFT = 300 ms
+相邻输出间隔 ITL = [10, 10, 100] ms
+TPOT = (420 - 300) / 3 = 40 ms
+</code></pre></div></div> <p>平均40毫秒，并不能说明每个间隔都接近40毫秒；最后一次已等了100毫秒。请求级 TPOT 的分位数，与逐间隔 ITL 的分位数，也不是同一组样本。多个请求的 TPOT 若先各算平均再平均，还会与按全部间隔加权的结果不同。</p> <p>如果把端到端时间也定义到<strong>末 token 到达</strong>，同一请求满足：</p> \[T_{last}=\mathrm{TTFT}+(G-1)\mathrm{TPOT}\] <p>本例为 <code class="language-plaintext highlighter-rouge">300 + 3 × 40 = 420</code> 毫秒。这是同一计时口径下的恒等式，不是无需运行就能预测延迟的模型。若工具计时到连接结束或最终统计事件，还可能多出尾部开销。一个流式响应块可能包含多个 token；没有逐 token 时间戳时，也不能把每个响应块的间隔直接当成精确 ITL。</p> <h2 id="8-一个只用-python-标准库的小练习">8. 一个只用 Python 标准库的小练习</h2> <p>下面复核前面的显存与时间计算，不加载模型，不模拟设备执行。可以直接复制运行。</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="n">math</span> <span class="kn">import</span> <span class="n">ceil</span><span class="p">,</span> <span class="n">isclose</span>
+
+<span class="n">KIB</span><span class="p">,</span> <span class="n">MIB</span><span class="p">,</span> <span class="n">GIB</span> <span class="o">=</span> <span class="mi">1024</span><span class="p">,</span> <span class="mi">1024</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1024</span><span class="o">**</span><span class="mi">3</span>
+<span class="n">layers</span><span class="p">,</span> <span class="n">kv_heads</span><span class="p">,</span> <span class="n">head_dim</span><span class="p">,</span> <span class="n">element_bytes</span> <span class="o">=</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">2</span>
+<span class="n">bytes_per_token</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">layers</span> <span class="o">*</span> <span class="n">kv_heads</span> <span class="o">*</span> <span class="n">head_dim</span> <span class="o">*</span> <span class="n">element_bytes</span>
+<span class="k">assert</span> <span class="n">bytes_per_token</span> <span class="o">==</span> <span class="mi">128</span> <span class="o">*</span> <span class="n">KIB</span>
+
+<span class="n">lengths</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">2048</span><span class="p">,</span> <span class="mi">1024</span><span class="p">]</span>
+<span class="n">payload</span> <span class="o">=</span> <span class="nf">sum</span><span class="p">(</span><span class="n">lengths</span><span class="p">)</span> <span class="o">*</span> <span class="n">bytes_per_token</span>
+<span class="k">assert</span> <span class="n">payload</span> <span class="o">==</span> <span class="mi">896</span> <span class="o">*</span> <span class="n">MIB</span>
+<span class="k">assert</span> <span class="n">payload</span> <span class="o">/</span> <span class="n">GIB</span> <span class="o">==</span> <span class="mf">0.875</span>
+<span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="sh">"</span><span class="s">three-request KV payload: </span><span class="si">{</span><span class="n">payload</span> <span class="o">/</span> <span class="n">MIB</span><span class="si">:</span><span class="p">.</span><span class="mi">0</span><span class="n">f</span><span class="si">}</span><span class="s"> MiB</span><span class="sh">"</span><span class="p">)</span>
+
+<span class="n">lengths</span><span class="p">,</span> <span class="n">block_size</span> <span class="o">=</span> <span class="p">[</span><span class="mi">19</span><span class="p">,</span> <span class="mi">33</span><span class="p">],</span> <span class="mi">16</span>
+<span class="n">blocks</span> <span class="o">=</span> <span class="nf">sum</span><span class="p">(</span><span class="nf">ceil</span><span class="p">(</span><span class="n">t</span> <span class="o">/</span> <span class="n">block_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">lengths</span><span class="p">)</span>
+<span class="n">capacity</span> <span class="o">=</span> <span class="n">blocks</span> <span class="o">*</span> <span class="n">block_size</span>
+<span class="n">unused</span> <span class="o">=</span> <span class="n">capacity</span> <span class="o">-</span> <span class="nf">sum</span><span class="p">(</span><span class="n">lengths</span><span class="p">)</span>
+<span class="nf">assert </span><span class="p">(</span><span class="n">blocks</span><span class="p">,</span> <span class="n">capacity</span><span class="p">,</span> <span class="n">unused</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">28</span><span class="p">)</span>
+<span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="sh">"</span><span class="s">paged capacity: </span><span class="si">{</span><span class="n">capacity</span> <span class="o">*</span> <span class="n">bytes_per_token</span> <span class="o">/</span> <span class="n">MIB</span><span class="si">:</span><span class="p">.</span><span class="mi">1</span><span class="n">f</span><span class="si">}</span><span class="s"> MiB</span><span class="sh">"</span><span class="p">)</span>
+<span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="sh">"</span><span class="s">valid payload: </span><span class="si">{</span><span class="nf">sum</span><span class="p">(</span><span class="n">lengths</span><span class="p">)</span> <span class="o">*</span> <span class="n">bytes_per_token</span> <span class="o">/</span> <span class="n">MIB</span><span class="si">:</span><span class="p">.</span><span class="mi">1</span><span class="n">f</span><span class="si">}</span><span class="s"> MiB</span><span class="sh">"</span><span class="p">)</span>
+
+<span class="n">request_start_ms</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">arrivals_ms</span> <span class="o">=</span> <span class="p">[</span><span class="mi">300</span><span class="p">,</span> <span class="mi">310</span><span class="p">,</span> <span class="mi">320</span><span class="p">,</span> <span class="mi">420</span><span class="p">]</span>
+<span class="n">ttft</span> <span class="o">=</span> <span class="n">arrivals_ms</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">request_start_ms</span>
+<span class="n">itl</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span> <span class="o">-</span> <span class="n">a</span> <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nf">zip</span><span class="p">(</span><span class="n">arrivals_ms</span><span class="p">,</span> <span class="n">arrivals_ms</span><span class="p">[</span><span class="mi">1</span><span class="p">:])]</span>
+<span class="n">tpot</span> <span class="o">=</span> <span class="nf">sum</span><span class="p">(</span><span class="n">itl</span><span class="p">)</span> <span class="o">/</span> <span class="nf">len</span><span class="p">(</span><span class="n">itl</span><span class="p">)</span> <span class="k">if</span> <span class="n">itl</span> <span class="k">else</span> <span class="bp">None</span>
+<span class="k">assert</span> <span class="n">ttft</span> <span class="o">==</span> <span class="mi">300</span> <span class="ow">and</span> <span class="n">itl</span> <span class="o">==</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">]</span> <span class="ow">and</span> <span class="n">tpot</span> <span class="o">==</span> <span class="mi">40</span>
+<span class="k">assert</span> <span class="nf">isclose</span><span class="p">(</span><span class="n">ttft</span> <span class="o">+</span> <span class="nf">len</span><span class="p">(</span><span class="n">itl</span><span class="p">)</span> <span class="o">*</span> <span class="n">tpot</span><span class="p">,</span> <span class="n">arrivals_ms</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">request_start_ms</span><span class="p">)</span>
+<span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="sh">"</span><span class="s">TTFT: </span><span class="si">{</span><span class="n">ttft</span><span class="si">}</span><span class="s"> ms; ITL: </span><span class="si">{</span><span class="n">itl</span><span class="si">}</span><span class="s"> ms; TPOT: </span><span class="si">{</span><span class="n">tpot</span><span class="si">:</span><span class="p">.</span><span class="mi">0</span><span class="n">f</span><span class="si">}</span><span class="s"> ms</span><span class="sh">"</span><span class="p">)</span>
+</code></pre></div></div> <p>本地运行得到：</p> <div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>three-request KV payload: 896 MiB
+paged capacity: 10.0 MiB
+valid payload: 6.5 MiB
+TTFT: 300 ms; ITL: [10, 10, 100] ms; TPOT: 40 ms
+</code></pre></div></div> <p>可以把 block size 改成8，观察尾部空位；再把第一个到达时间固定，只增大最后一次间隔，观察 TTFT 与 TPOT。改动只说明定义和算术关系，不构成真实性能优化的证据。</p> <h2 id="9-自测先回答再展开">9. 自测：先回答，再展开</h2> <ol> <li>三条请求缓存长度不同时，为什么不能直接用“并发数×最大长度”作为有效 KV？</li> <li>教学模型中，KV head 从8变成32，其他条件不变，有效 KV 如何变化？</li> <li>block size 为16，长度19的请求增长到20，需要新分配 block 吗？</li> <li>C已经到达、每轮 token 预算也有剩余，为什么仍可能排队？</li> <li>Prefill拆成两块后，第二块是否可以不看第一块？</li> <li>TPOT为40毫秒，是否说明每个输出间隔都不超过40毫秒？</li> </ol> <details> <summary>展开参考答案</summary> <ol> <li>每条请求有效缓存按自己的实际长度增长，应对长度求和。最大长度乘请求数可以作为另一种容量上界或分配策略的账，但不等于有效数据。</li> <li>增加到四倍。这里没有改变分片、共享和元素字节数。</li> <li>不需要，两个block已有32个位置的容量。增长到33时才需要第三个block；有效数据增长与新分配block不是同一个时刻。</li> <li>还可能受活跃请求数、KV容量、未来增长预留和调度策略限制；token预算不是唯一条件。</li> <li>不能。因果上下文仍要保留，拆分改变处理批次，不改变允许访问的历史。</li> <li>不能。本例三个间隔为10、10、100毫秒，平均仍为40毫秒。需要查看间隔分布及相应口径的尾延迟。</li> </ol> </details> <h2 id="参考资料">参考资料</h2> <ul> <li> <a href="https://arxiv.org/abs/2309.06180" rel="external nofollow noopener" target="_blank">Efficient Memory Management for Large Language Model Serving with PagedAttention</a>：KV block、逻辑到物理映射、迭代级调度及内存共享</li> <li> <a href="https://arxiv.org/abs/2401.09670" rel="external nofollow noopener" target="_blank">DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving</a>：TTFT/TPOT需求与Prefill、Decode资源干扰</li> </ul> <p>这些资料用于核对原理。本文的配置、调度表和时间戳都是教学例子；具体框架的调度边界、缓存预留与指标实现，需要结合版本继续检查。</p> </div> </article> <br> <hr> <br> <h2 class="text-3xl font-semibold mb-4 mt-12">喜欢这篇文章？</h2> <p class="mb-2">接下来还可以读读这些：</p> <ul class="list-disc pl-7 my-3 space-y-2 marker:text-[var(--global-theme-color)]"> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/vllm-contest-profiling-notes/">vLLM 比赛排查笔记：两个负结果和一次主机内存复测</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/vllm-contest-attention-tiles/">vLLM 比赛准备记录：先核对 Attention 数值，再调整分块</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/metax-tp-overlap-debugging/">MetaX TP overlap 排查记录：接口跑通之后，为什么 GEMM 反而变慢？</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/peft-lorafa-closure-grad/">给 PEFT 修一个 LoRA-FA 优化器接口：closure 为什么不能 backward？</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/llm-foundations-01-architecture-to-inference/">基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/vllm-ascend-mooncake-hybrid-registration/">给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-research-screening/">910B3 推理研究的九条线索和实验结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-inference-audit-negative-results/">910B3 推理实验复核：从干扰微基准到完整模型的负结果</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-mechanism/">拆到算子看:910B3 上 prefill 和 decode 到底在争什么</a> </li> <li class="leading-relaxed"> <a class="underline decoration-1 hover:text-[var(--global-hover-color)]" href="/blog/2026/ascend-910b3-prefill-decode-disaggregation/">在 910B3 上把 LLM 推理的"前菜"和"主菜"分开炒——PD 分离实测</a> </li> </ul> </div> </div> <aside class="site-engagement container my-4" aria-label="访问统计与点赞"> <p>全站访问次数：<span data-site-visits aria-live="polite">加载中…</span></p> <button type="button" class="btn btn-outline-primary" data-like-url="https://cjwystz.github.io/blog/2026/llm-foundations-02-kv-memory-and-scheduling/" disabled> ♥ 给这篇文章点赞 · <span data-like-count>加载中…</span> </button> <span data-like-status role="status" class="ml-2"></span> <small class="d-block mt-2 text-muted">无需登录，可多次点赞。访问次数按页面加载累计；统计由不蒜子和 Applause 社区服务提供。</small> <noscript>开启 JavaScript 后可查看统计并点赞。</noscript> </aside> <script defer src="/assets/js/site-engagement.js"></script> <footer class="fixed-bottom" role="contentinfo"> <div class="container mt-0"> © Copyright 2026 Chen Jiawei. Powered by <a href="https://jekyllrb.com/" target="_blank" rel="external nofollow noopener">Jekyll</a> with <a href="https://github.com/alshedivat/al-folio" rel="external nofollow noopener" target="_blank">al-folio</a> theme. Hosted by <a href="https://pages.github.com/" target="_blank" rel="external nofollow noopener">GitHub Pages</a>. </div> </footer> <script>
+  window.alFolio = {
+    compatBootstrap: false
+  };
+</script> <script src="/assets/js/nav-toggle.js?v=141bd79a73ebc0f0b6ea58e440ae79fc"></script> <script defer src="https://cdn.jsdelivr.net/npm/masonry-layout@4.2.2/dist/masonry.pkgd.min.js" integrity="sha256-Nn1q/fx0H7SNLZMQ5Hw5JLaTRZp0yILA/FRexe19VdI=" crossorigin="anonymous"></script> <script defer src="https://cdn.jsdelivr.net/npm/imagesloaded@5.0.0/imagesloaded.pkgd.min.js" integrity="sha256-htrLFfZJ6v5udOG+3kNLINIKh2gvoKqwEhHYfTTMICc=" crossorigin="anonymous"></script> <script defer src="/assets/js/masonry.js?v=e49affc7bd2646f6acdad1dbe02c2359" type="text/javascript"></script> <script defer type="text/javascript" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script> <script src="/assets/al_math/js/mathjax-setup.js"></script> <script src="/assets/js/tooltips-setup.js?v=fe487e99db6c43751e6e7bdb2d6a0611"></script> <script src="/assets/js/no_defer.js?v=53b1b1a645525975c963ce8bf8bfefcf"></script> <script defer src="/assets/js/common.js?v=87baac90f765f2f3362dcf6aaf312a8a"></script> <script defer src="/assets/js/copy_code.js?v=c8a01c11a92744d44b093fc3bda915df" type="text/javascript"></script> <script defer src="/assets/js/jupyter_new_tab.js?v=896d254890d9b47f0281f63bfccf0dee"></script> <script async src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script> <script async src="https://badge.dimensions.ai/badge.js"></script> <script defer src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js" integrity="sha256-ZgMyDAIYDYGxbcpJcfUnYwNevG/xi9OHKaR/8GK+jWc=" crossorigin="anonymous"></script> <script defer src="/assets/al_img_tools/js/zoom.js"></script> <script defer src="/assets/js/progress-bar.js?v=499464c5c63ced6cf7ad62509f1e2610" type="text/javascript"></script> <script src="https://cdn.jsdelivr.net/npm/vanilla-back-to-top@7.2.1/dist/vanilla-back-to-top.min.js" integrity="sha256-uMJJ3EoTyfRBoTbR+lrfu1uRQ87RZG8AR3cVNuQVeFg=" crossorigin="anonymous"></script> <script>
+    addBackToTop();
+  </script> <script type="module" src="/assets/al_search/js/search/ninja-keys.min.js"></script> <ninja-keys hidebreadcrumbs noautoloadmdicons placeholder="Type to start searching"></ninja-keys> <script src="/assets/al_search/js/search-setup.js"></script> <script>
+// get the ninja-keys element
+const ninja = document.querySelector('ninja-keys');
+
+// add the home and posts menu items
+ninja.data = [{
+    id: "nav-about",
+    title: "about",
+    section: "Navigation",
+    handler: () => {
+      window.location.href = "/";
+    },
+  },{id: "nav-blog",
+          title: "blog",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/blog/";
+          },
+        },{id: "nav-publications",
+          title: "publications",
+          description: "Research in large-model systems, multimodal reasoning, and retrieval-augmented generation.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/publications/";
+          },
+        },{id: "nav-projects",
+          title: "projects",
+          description: "A collection of research and open-source projects.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/projects/";
+          },
+        },{id: "nav-repositories",
+          title: "repositories",
+          description: "Open-source communities and repositories I contribute to.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/repositories/";
+          },
+        },{id: "nav-cv",
+          title: "CV",
+          description: "Education, AI infrastructure experience, research, and open-source contributions.",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/cv/";
+          },
+        },{id: "nav-中文版",
+          title: "中文版",
+          description: "",
+          section: "Navigation",
+          handler: () => {
+            window.location.href = "/https:/github.com/cjwystz";
+          },
+        },{id: "post-基础知识巩固-02-kv-显存-连续批处理与推理延迟",
+        
+          title: "基础知识巩固 02：KV 显存、连续批处理与推理延迟",
+        
+        description: "用不等长请求、分页和调度的手算例子，理解 KV 占用如何增长，以及 TTFT、TPOT 和吞吐为什么需要一起看。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/llm-foundations-02-kv-memory-and-scheduling/";
+          
+        },
+      },{id: "post-vllm-比赛排查笔记-两个负结果和一次主机内存复测",
+        
+          title: "vLLM 比赛排查笔记：两个负结果和一次主机内存复测",
+        
+        description: "记录 Attention 后续候选为何没有保留、缩批阶段的配置查询开销，以及 C500 主机内存 OOM 复测的现象与未解决问题。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-contest-profiling-notes/";
+          
+        },
+      },{id: "post-vllm-比赛准备记录-先核对-attention-数值-再调整分块",
+        
+          title: "vLLM 比赛准备记录：先核对 Attention 数值，再调整分块",
+        
+        description: "整理 MiniCPM5-2B 在 BI-V150 上的一次 Attention 分块实验，包括参考检查、实际算子命中和完整请求规模的单轮开发对照。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-contest-attention-tiles/";
+          
+        },
+      },{id: "post-metax-tp-overlap-排查记录-接口跑通之后-为什么-gemm-反而变慢",
+        
+          title: "MetaX TP overlap 排查记录：接口跑通之后，为什么 GEMM 反而变慢？",
+        
+        description: "从能力查询、原生枚举和 Userbuffer 接口兼容，到 UB 分配消融与 TP4 真实训练短测，记录问题、修复及性能验证边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/metax-tp-overlap-debugging/";
+          
+        },
+      },{id: "post-给-peft-修一个-lora-fa-优化器接口-closure-为什么不能-backward",
+        
+          title: "给 PEFT 修一个 LoRA-FA 优化器接口：closure 为什么不能 backward？",
+        
+        description: "从 CPU 最小复现到梯度上下文修复，记录 PEFT issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/peft-lorafa-closure-grad/";
+          
+        },
+      },{id: "post-基础知识巩固-01-从-transformer-结构到大模型的一次完整推理",
+        
+          title: "基础知识巩固 01：从 Transformer 结构到大模型的一次完整推理",
+        
+        description: "从 token、Embedding、Attention 和 FFN 出发，串起 Prefill、Decode、KV Cache、显存估算与服务调度；附教学计算和可运行的最小注意力练习。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/llm-foundations-01-architecture-to-inference/";
+          
+        },
+      },{id: "post-给-vllm-ascend-修一个-kv-缓存注册-bug-从-tensor-view-到真实-p-d-验证",
+        
+          title: "给 vLLM-Ascend 修一个 KV 缓存注册 bug：从 tensor view 到真实 P/D 验证",
+        
+        description: "记录 Mooncake V1 混合注意力注册路径的一个小修复：恢复底层存储地址、合并重叠区域，并用 CPU 回归与真实 Gemma 3 双卡 P/D 验证明确证据边界。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/vllm-ascend-mooncake-hybrid-registration/";
+          
+        },
+      },{id: "post-910b3-推理研究的九条线索和实验结果",
+        
+          title: "910B3 推理研究的九条线索和实验结果",
+        
+        description: "汇总计算干扰、KV 入站、真实 PD、hybrid 缓存和多模态方向的调研与实验，并记录通信执行路径候选从微基准交叉点到完整 TP2 对照的筛选过程。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-research-screening/";
+          
+        },
+      },{id: "post-910b3-推理实验复核-从干扰微基准到完整模型的负结果",
+        
+          title: "910B3 推理实验复核：从干扰微基准到完整模型的负结果",
+        
+        description: "修正双 stream 计时、重放相同请求 trace、调优 SGLang 基线，并验证 vector attention 与 KV 接收。干扰存在，但微基准优势没有转化为 Qwen3 完整模型收益。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-inference-audit-negative-results/";
+          
+        },
+      },{id: "post-拆到算子看-910b3-上-prefill-和-decode-到底在争什么",
+        
+          title: "拆到算子看:910B3 上 prefill 和 decode 到底在争什么",
+        
+        description: "上一篇在 910B3 上测了 PD 分离的配比效果——3P:4D 吞吐反超一体化 11%,只给 1 张 prefill 卡会把 TTFT p99 打到 9 秒。但那些都是端到端数字,回答不了&quot;为什么&quot;。这篇往下拆一层:用昇腾 msprof 把 Cube/Vector/MTE 三类执行单元分开观测,给出 prefill 与 decode 资源争抢的硬件级证据——同一个 MatMul 算子,prefill 负载下 Cube 占用 0.92,decode 负载下只有 0.14,而搬数通道 MTE2 被打满到 0.99。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-mechanism/";
+          
+        },
+      },{id: "post-在-910b3-上把-llm-推理的-quot-前菜-quot-和-quot-主菜-quot-分开炒-pd-分离实测",
+        
+          title: "在 910B3 上把 LLM 推理的&quot;前菜&quot;和&quot;主菜&quot;分开炒——PD 分离实测",
+        
+        description: "在大模型推理里,prefill 和 decode 是两个计算特征完全不同的阶段——前者吃算力、后者吃带宽,挤在同一张卡里互相干扰。这篇博客讲清楚 PD 分离是什么、虚拟 PD(同卡逻辑分离)和真机 PD(独立物理卡)的区别,并在华为 910B3 上做了真机 PD 的配比实验:7 卡切成 3P+4D,高并发吞吐反超一体化 11%;但只给 1 张 prefill 卡会把 TTFT 尾延迟打到 9 秒。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/ascend-910b3-prefill-decode-disaggregation/";
+          
+        },
+      },{id: "post-守真-而非逐假-ai-生成图像检测为什么总是慢半拍",
+        
+          title: "守真，而非逐假——AI 生成图像检测为什么总是慢半拍",
+        
+        description: "AI 生成图像检测的系统性困境：检测器永远追不上生成器的迭代。这篇博客聊聊这个领域走过的几条路（GAN 指纹、DIRE、UnivFD、latent blending），以及一个换方向的思路——与其学假图长什么样，不如给真实照片的分布修一圈围墙。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/real-envelope-aigc-detection/";
+          
+        },
+      },{id: "post-跑满-4-小时-零交卷-reward-0-0-但这不是躺平",
+        
+          title: "跑满 4 小时、零交卷、reward 0.0——但这不是躺平",
+        
+        description: "开放式性能题的第一次真实 agent 校准：DeepSeek-V4.1-Flash 驱动的 claude-code 在 4B FlagScale/沐曦题上 4 小时跑满、零交卷、reward 0.0——但 3079 条轨迹里是教科书级的双峰诊断、一次通信串行化的实锤，和 +47% 的真实吞吐提升。复盘两个坑（一个算我们的，一个算它的）、阈值决策，以及为什么 binary reward 会抹掉这次实验里最有价值的信息。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-first-agent-calibration/";
+          
+        },
+      },{id: "post-100-秒被秒杀之后-我们把-benchmark-升级成了-quot-没人会做的题-quot",
+        
+          title: "100 秒被秒杀之后：我们把 benchmark 升级成了&quot;没人会做的题&quot;",
+        
+        description: "国产 infra agentic benchmark 的第一次真机校准翻车实录——精心设计的 hard 题被当代模型 100 秒连过五次，复盘出&quot;好题的三条反例&quot;，然后转身做了一道连出题团队自己都没解出来的开放式性能题：32 卡国产 GPU 上把 27B 训练吞吐推过实测纪录。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/benchmark-hard-task-no-oracle/";
+          
+        },
+      },{id: "post-解剖一道顶级-agentic-考题-frontierswe-推理优化题的设计艺术",
+        
+          title: "解剖一道顶级 agentic 考题：FrontierSWE 推理优化题的设计艺术",
+        
+        description: "逐文件拆解 FrontierSWE 的 inference-system-optimization——B200 上 SGLang 服务优化，让 agent 去打一个已经拉满配置的 baseline。从任务结构、判分流水线、防作弊武器库三个层面分析它为什么是好题，以及对国产 infra benchmark 的七点可借鉴设计。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/frontierswe-inference-task-anatomy/";
+          
+        },
+      },{id: "post-把一次真实事故变成-ai-考题-国产-infra-benchmark-的第一道题",
+        
+          title: "把一次真实事故变成 AI 考题：国产 infra benchmark 的第一道题",
+        
+        description: "把在国产 GPU 平台适配中遇到的一个真实 vendor 库升级事故，改写成一道 Harbor 格式的 agentic benchmark 题——包括 bug 的 Python import 机制原理、题目环境设计，以及&quot;不要标准答案、只要判分器&quot;的 verify 哲学。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/harbor-infra-benchmark-first-task/";
+          
+        },
+      },{id: "post-追一个静默精度-bug-我给-sglang-提-pr-的完整记录",
+        
+          title: "追一个静默精度 bug：我给 SGLang 提 PR 的完整记录",
+        
+        description: "从发现 issue",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-npu-moe-fp32-pr/";
+          
+        },
+      },{id: "post-昇腾-910b-部署-sglang-推理服务实战-从容器到可用-api",
+        
+          title: "昇腾 910B 部署 SGLang 推理服务实战：从容器到可用 API",
+        
+        description: "在 Atlas 800I A2（8×910B3）上用官方 NPU 镜像部署 SGLang 推理服务的完整记录——容器挂载清单、设备可见性排查、多卡隔离、无外网权重方案与逐条验证命令。",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/sglang-ascend-910b-deploy/";
+          
+        },
+      },{id: "post-欢迎来到我的大模型系统笔记",
+        
+          title: "欢迎来到我的大模型系统笔记",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2026/welcome/";
+          
+        },
+      },{id: "post-rag-优化文生图-不动模型-修复提示词错位",
+        
+          title: "RAG 优化文生图——不动模型，修复提示词错位",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/rag-optimized-t2i/";
+          
+        },
+      },{id: "news-granted-national-software-copyright-2025sr0617553-for-the-zkllm-llm-zero-knowledge-proof-visualization-system",
+          title: 'Granted National Software Copyright 2025SR0617553 for the zkLLM LLM zero-knowledge-proof visualization system.',
+          description: "",
+          section: "News",},{id: "news-our-rag-optimized-text-to-image-framework-was-published-at-the-wise-2025-workshop-tsinghua-bnrist-code-is-available-on-github-https-github-com-dadada66666-t2i",
+          title: 'Our RAG-optimized text-to-image framework was published at the WISE 2025 Workshop (Tsinghua BNRist)....',
+          description: "",
+          section: "News",},{id: "news-ongoing-research-on-sequence-packing-and-scheduling-for-large-model-training-co-first-author-the-manuscript-is-in-preparation",
+          title: 'Ongoing research on sequence packing and scheduling for large-model training; co-first author. The...',
+          description: "",
+          section: "News",},{id: "news-received-the-ziyu-fund-special-class-scholarship-紫玉基金特等奖学金-at-ustb-for-the-2025-2026-academic-year",
+          title: 'Received the **Ziyu Fund Special-Class Scholarship (紫玉基金特等奖学金)** at USTB for the 2025–2026 academic...',
+          description: "",
+          section: "News",},{id: "projects-flagos-flagscale",
+          title: 'FlagOS / FlagScale',
+          description: "MetaX adaptation, memory optimization, and multimodal training",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/flagscale/";
+            },},{id: "projects-hugging-face-peft",
+          title: 'Hugging Face / PEFT',
+          description: "LoRA-FA optimizer closure gradient-context fix and regression test",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/peft/";
+            },},{id: "projects-rag-optimized-text-to-image",
+          title: 'RAG-Optimized Text-to-Image',
+          description: "RAG-fronted prompt optimization for T2I systems (WISE 2025)",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/rag-t2i/";
+            },},{id: "projects-zkllm-llm-zero-knowledge-proof-visualization",
+          title: 'zkLLM — LLM Zero-Knowledge Proof Visualization',
+          description: "Inference-trust audit visualization for LLM zero-knowledge proofs",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/zkllm/";
+            },},{
+        id: 'social-email',
+        title: 'email',
+        section: 'Socials',
+        handler: () => {
+          window.open("mailto:%32%34%35%31%34%32%37%37%39%36@%71%71.%63%6F%6D", "_blank");
+        },
+      },{
+        id: 'social-github',
+        title: 'GitHub',
+        section: 'Socials',
+        handler: () => {
+          window.open("https://github.com/cjwystz", "_blank");
+        },
+      },{
+        id: 'social-wechat_username',
+        title: 'Wechat_username',
+        section: 'Socials',
+        handler: () => {
+          window.open("", "_blank");
+        },
+      },{
+        id: 'social-rss',
+        title: 'RSS Feed',
+        section: 'Socials',
+        handler: () => {
+          window.open("/feed.xml", "_blank");
+        },
+      },{
+      id: 'light-theme',
+      title: 'Change theme to light',
+      description: 'Change the theme of the site to Light',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("light");
+      },
+    },
+    {
+      id: 'dark-theme',
+      title: 'Change theme to dark',
+      description: 'Change the theme of the site to Dark',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("dark");
+      },
+    },
+    {
+      id: 'system-theme',
+      title: 'Use system default theme',
+      description: 'Change the theme of the site to System Default',
+      section: 'Theme',
+      handler: () => {
+        setThemeSetting("system");
+      },
+    },];
+
+</script> <script src="/assets/al_search/js/shortcut-key.js"></script> </body> </html>
