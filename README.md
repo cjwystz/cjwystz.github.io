@@ -8,6 +8,7 @@
 2. 把本目录所有文件上传到该仓库根目录(网页上传或 git push 均可)。
 3. 仓库 **Settings → Pages → Build and deployment → Source** 选择 **`GitHub Actions`**。
 4. 仓库 **Actions** 页会自动运行 `Deploy site` 工作流,1–2 分钟后访问 **`https://cjwystz.github.io`** 即可。
+5. 94822u30
 
 > 仓库里已包含 `.github/workflows/deploy.yml`(自动构建部署)与 `render-cv.yml`(自动用 RenderCV 生成 CV PDF),无需手动配置。
 
