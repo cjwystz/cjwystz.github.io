@@ -4,6 +4,20 @@
 @use "variables" as v;
 @use "sass:color";
 
+// Keep Chinese navigation labels together when the menu spans multiple rows.
+.navbar .nav-link {
+  white-space: nowrap;
+}
+
+.navbar .navbar-menu-list {
+  flex-wrap: wrap !important;
+  justify-content: flex-end;
+}
+
+.navbar .navbar-menu-list > li {
+  flex-shrink: 0;
+}
+
 :root {
   color-scheme: light;
   --global-bg-color: #{v.$white-color};
